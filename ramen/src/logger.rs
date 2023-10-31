@@ -52,19 +52,21 @@ impl Logger {
         use std::io::Write;
         if level >= self.level {
             let date = chrono::offset::Local::now().format("%Y-%m-%d %H:%M:%S");
-            let filename = if filename.is_some() { format!(" [{}:{}] ", filename.unwrap(), line) } else { String::new() };
+            let filename = if filename.is_some() { format!("[{}:{}]", filename.unwrap(), line) } else { String::new() };
 
-            let message_formated = format!("{} :: [RAMEN] :: [{}] ::{}\n    {}", date, level, filename, message);
+            let mut message_formated = format!("{} [RAMEN] [{}] - {}\n", date, level, message);
+            if level == Level::Debug {
+                message_formated = format!("{} [RAMEN] [{}] {} - {}\n", date, level, filename, message);
+            }
+
             self.file.write_all(message_formated.as_bytes()).unwrap();
-            self.file.write_all(b"\n").unwrap();
             self.file.sync_all().unwrap();
-            self.file.flush().unwrap();
 
             let message_formated = match level {
-                Level::Debug => format!("{} :: [RAMEN] :: [\x1b[34m{}\x1b[0m] ::{}\n    {}", date, level, filename, message),
-                Level::Info  => format!("{} :: [RAMEN] :: [\x1b[32m{}\x1b[0m] ::\n    {}", date, level, message),
-                Level::Warn  => format!("{} :: [RAMEN] :: [\x1b[33m{}\x1b[0m] ::\n    {}", date, level, message),
-                Level::Error => format!("{} :: [RAMEN] :: [\x1b[31m{}\x1b[0m] ::\n    {}", date, level, message),
+                Level::Debug => format!("{} [RAMEN] [\x1b[34m{}\x1b[0m] {} - {}", date, level, filename, message),
+                Level::Info  => format!("{} [RAMEN] [\x1b[32m{}\x1b[0m] - {}", date, level, message),
+                Level::Warn  => format!("{} [RAMEN] [\x1b[33m{}\x1b[0m] - {}", date, level, message),
+                Level::Error => format!("{} [RAMEN] [\x1b[31m{}\x1b[0m] - {}", date, level, message),
             };
 
             let mut lock = std::io::stdout().lock();
