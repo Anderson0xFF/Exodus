@@ -1,1 +1,1 @@
-sudo apt install cmake build-essential clang gdb llvm libdrm-dev libgdm-dev libegl-dev libgles-dev
+sudo apt install cmake build-essential clang gdb llvm libdrm-dev libgbm-dev libegl-dev libgles-dev
