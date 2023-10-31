@@ -1,4 +1,4 @@
 [workspace] 
 
-members = ["drm", "ramen"]
+members = ["drm", "gbm", "ramen"]
     
