@@ -1,4 +1,3 @@
 [workspace] 
-
-members = ["drm", "gbm", "ramen"]
-    
+resolver = "2"
+members = ["drm", "gbm", "exodus-protocols", "exodus-common", "exodus-client", "exodus-server", "exodus-errors"]
