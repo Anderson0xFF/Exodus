@@ -1,0 +1,16 @@
+[package]
+name = "exodus-server"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+libc = "0.2"
+
+drm = {path = "../drm"}
+gbm = {path = "../gbm"}
+
+exodus-protocols = {path = "../exodus-protocols"}
+exodus-common = {path = "../exodus-common"}
+exodus-errors = {path = "../exodus-errors"}
