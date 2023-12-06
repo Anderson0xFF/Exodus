@@ -4,95 +4,84 @@
 use exodus_errors::ErrorKind;
 use gbm::{
     gbm_bo_flags::{GBM_BO_USE_RENDERING, GBM_BO_USE_SCANOUT, GBM_BO_USE_CURSOR},
-    gbm_bo_format::{GBM_BO_FORMAT_ARGB8888, GBM_BO_FORMAT_XRGB8888}, gbm_bo_transfer_flags::GBM_BO_TRANSFER_READ,
+    gbm_bo_format::{GBM_BO_FORMAT_ARGB8888, GBM_BO_FORMAT_XRGB8888}, gbm_bo_transfer_flags::{GBM_BO_TRANSFER_READ, GBM_BO_TRANSFER_WRITE}, gbm_bo_map, gbm_bo_unmap, gbm_surface_create, gbm_surface_lock_front_buffer,
 };
+use libc::c_void;
 
-use crate::{error, types::NativeDevice};
-use super::connectors::Screen;
+use super::{screen::Screen, buffer::{PixelFormat, BufferFlag}, device::native_device::NativeDeviceRef};
 
 #[derive(Debug)]
 pub struct Surface {
     width: u32,
     height: u32,
-    format: SurfaceFormat,
-    surface_type: SurfaceType,
-    data: *mut gbm::gbm_surface,
+    format: PixelFormat,
+    surface: *mut gbm::gbm_surface,
+    native_device: NativeDeviceRef,
 }
 
 impl Surface {
-    pub fn new(
-        native_device: NativeDevice,
-        width: u32,
-        height: u32,
-        format: SurfaceFormat,
-        surface_type: SurfaceType,
-        screen: &Screen,
-    ) -> Result<Self, ErrorKind> {
-        let format_u32 = match format {
-            SurfaceFormat::XRGB8888 => GBM_BO_FORMAT_XRGB8888,
-            SurfaceFormat::ARGB8888 => GBM_BO_FORMAT_ARGB8888,
-        };
+    pub fn new(width: u32, height: u32, format: PixelFormat, surface_flags: &[BufferFlag], native_device: NativeDeviceRef) -> Result<Self, ErrorKind> {
 
-        let flags = match surface_type {
-            SurfaceType::Window     => GBM_BO_USE_SCANOUT       | GBM_BO_USE_RENDERING,
-            SurfaceType::Cursor     => GBM_BO_USE_SCANOUT       | GBM_BO_USE_CURSOR     | GBM_BO_USE_RENDERING,
-            SurfaceType::Overlay    => GBM_BO_USE_SCANOUT       | GBM_BO_USE_RENDERING,
-            SurfaceType::Background => GBM_BO_USE_SCANOUT       | GBM_BO_USE_RENDERING,
-        };
+        let mut flags = 0;
 
-        let data: *mut gbm::gbm_surface = unsafe {
-            gbm::gbm_surface_create(
-                native_device,
-                screen.width(),
-                screen.height(),
-                format_u32,
-                flags,
-            )
-        };
+        for flag in surface_flags {
+            match flag {
+                BufferFlag::Cursor => flags |= GBM_BO_USE_CURSOR,
+                BufferFlag::Linear => flags |= GBM_BO_USE_RENDERING,
+                BufferFlag::Protected => flags |= GBM_BO_USE_SCANOUT,
+                BufferFlag::Rendering => flags |= GBM_BO_USE_RENDERING,
+                BufferFlag::Scanout => flags |= GBM_BO_USE_SCANOUT,
+            }
+        }
 
-        let surface = Surface { width, height, format, surface_type, data};
+        let surface = unsafe { gbm_surface_create(native_device.as_ptr(), width, height, format as u32, flags) };
+        if surface.is_null() {
+            return Err(ErrorKind::SURFACE_CREATE_FAILED);
+        }
+        
+        let surface = Surface { width, height, format, surface, native_device };
         Ok(surface)
     }
 
     pub fn get_data(&self) -> *mut gbm::gbm_surface {
-        self.data
+        self.surface
     }
 
-    pub fn get_format(&self) -> SurfaceFormat {
+    pub fn get_format(&self) -> PixelFormat {
         self.format
     }
 
-    pub fn get_type(&self) -> SurfaceType {
-        self.surface_type
-    }
-
     pub fn lock(&self) -> Result<SurfaceLock, ErrorKind> {
-        let data = unsafe { gbm::gbm_surface_lock_front_buffer(self.data) };
+        let data = unsafe { gbm_surface_lock_front_buffer(self.surface) };
         if data.is_null() {
-            return Err(ErrorKind::EXODUS_SURFACE_LOCK_FAILED);
+            return Err(ErrorKind::SURFACE_LOCK_FAILED);
         }
 
-        let surface_lock = SurfaceLock { width: self.width, height: self.height, data };
+        let surface_lock = SurfaceLock { width: self.width, height: self.height, buffer: data };
         Ok(surface_lock)
+    }
+
+    pub fn as_ptr(&self) -> *mut gbm::gbm_surface {
+        self.surface
     }
 }
 
 pub struct SurfaceLock {
     width: u32,
     height: u32,
-    data: *mut gbm::gbm_bo,
+    buffer: *mut gbm::gbm_bo,
 }
 
 impl SurfaceLock {
 
     #[inline]
     pub fn handle(&self) -> u32 {
-        unsafe { gbm::gbm_bo_get_handle(self.data).u32_ }
+        unsafe { gbm::gbm_bo_get_handle(self.buffer).u32_ }
     }
 
     #[inline]
     pub fn stride(&self) -> u32 {
-        unsafe { gbm::gbm_bo_get_stride(self.data) }
+        unsafe { gbm::gbm_bo_get_stride(self.buffer) }
     }
 
     #[inline]
@@ -105,57 +94,53 @@ impl SurfaceLock {
         self.height
     }
 
-    pub fn format(&self) -> SurfaceFormat {
-        let format = unsafe { gbm::gbm_bo_get_format(self.data) };
-        let format = SurfaceFormat::from_u32(format).unwrap();
-        format
+    pub fn write(&mut self, x: u32, y: u32, width: u32, height: u32, data: &[u32]) -> Result<(), ErrorKind> {
+        let mut stride = self.stride();
+        let mut map_data = std::ptr::null_mut();
+        let pixels = unsafe { gbm_bo_map(self.buffer, x, y, width, height, GBM_BO_TRANSFER_WRITE, &mut stride, &mut map_data) };
+
+        if pixels == libc::MAP_FAILED {
+            return Err(ErrorKind::SURFACE_LOCK_MAPPING_FAILED);
+        }
+
+        unsafe { 
+            std::ptr::copy_nonoverlapping(data.as_ptr() as *const c_void, pixels, data.len());
+            gbm_bo_unmap(self.buffer, map_data);
+        };
+        Ok(())
+    }
+
+    pub fn read(&mut self, x: u32, y: u32, width: u32, height: u32) -> Result<Vec<u32>, ErrorKind> {
+        let mut stride = self.stride();
+        let mut map_data = std::ptr::null_mut();
+        let pixels_ptr = unsafe { gbm_bo_map(self.buffer, x, y, width, height, GBM_BO_TRANSFER_READ, &mut stride, &mut map_data) };
+
+        if pixels_ptr == libc::MAP_FAILED {
+            return Err(ErrorKind::SURFACE_LOCK_MAPPING_FAILED);
+        }
+
+        let pixels = unsafe { std::slice::from_raw_parts(pixels_ptr as *const u32, (width * height) as usize) };
+        unsafe { 
+            gbm_bo_unmap(self.buffer, map_data);
+        };
+        Ok(pixels.to_vec())
     }
 
     pub fn pixels(&self) -> Result<Vec<u32>, ErrorKind> {
-        let width = self.width();
-        let height = self.height();
         let mut stride = self.stride();
-
-        let mut pixels = Vec::new();
         let mut map_data = std::ptr::null_mut();
-        let addr = unsafe { gbm::gbm_bo_map(self.data, 0, 0, width, height, GBM_BO_TRANSFER_READ, &mut stride, &mut map_data) };
+        let pixels_ptr = unsafe { gbm_bo_map(self.buffer, 0, 0, self.width, self.height, GBM_BO_TRANSFER_READ, &mut stride, &mut map_data) };
 
-        if addr == libc::MAP_FAILED {
-            return Err(ErrorKind::EXODUS_SURFACE_MAP_FAILED);
+        if pixels_ptr == libc::MAP_FAILED {
+            return Err(ErrorKind::SURFACE_LOCK_MAPPING_FAILED);
         }
 
-        let pixel_ptr = addr as *const u32;
-        let pixel_slice = unsafe { std::slice::from_raw_parts(pixel_ptr, (width * height) as usize) };
-        pixels.extend_from_slice(pixel_slice);
-
-        unsafe { gbm::gbm_bo_unmap(self.data, map_data) };
-
-        Ok(pixels)
+        let pixels = unsafe { std::slice::from_raw_parts(pixels_ptr as *const u32, (self.width * self.height) as usize) };
+        unsafe { 
+            gbm_bo_unmap(self.buffer, map_data);
+        };
+        Ok(pixels.to_vec())
     }
-}
-
-#[derive(Debug, Copy, Clone)]
-pub enum SurfaceFormat {
-    XRGB8888 = GBM_BO_FORMAT_XRGB8888 as isize,
-    ARGB8888 = GBM_BO_FORMAT_ARGB8888 as isize,
-}
-
-impl SurfaceFormat {
-    pub fn from_u32(format: u32) -> Result<Self, ErrorKind> {
-        match format {
-            GBM_BO_FORMAT_XRGB8888 => Ok(SurfaceFormat::XRGB8888),
-            GBM_BO_FORMAT_ARGB8888 => Ok(SurfaceFormat::ARGB8888),
-            _ => Err(ErrorKind::EXODUS_SURFACE_FORMAT_UNKNOWN),
-        }
-    }
-}
-
-#[derive(Debug, Copy, Clone)]
-pub enum SurfaceType {
-    Window = 1,
-    Cursor,
-    Overlay,
-    Background,
 }
 
 #[derive(Debug, Copy, Clone)]
