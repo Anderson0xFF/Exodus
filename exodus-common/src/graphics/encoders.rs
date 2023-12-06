@@ -1,8 +1,9 @@
-use std::fmt::Display;
-use drm::{drmModeGetEncoder, drmModeFreeEncoder};
+use drm::{drmModeFreeEncoder, drmModeGetEncoder};
 use exodus_errors::ErrorKind;
 
 use crate::{debug, error};
+
+use super::device::GPUID;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Encoder {
@@ -14,32 +15,28 @@ pub struct Encoder {
 }
 
 impl Encoder {
-    pub fn new(id: u32, device: i32) -> Result<Self, ErrorKind> {
-        debug!("Getting encoder...");
-        unsafe {
-            let encoder_ptr: *mut drm::_drmModeEncoder = drmModeGetEncoder(device, id);
+    pub fn new(id: u32, gpu: GPUID) -> Result<Self, ErrorKind> {
+        debug!("Getting encoder. - EncoderID: {} - GPUID: {}", id, gpu);
 
-            if encoder_ptr.is_null() {
-                let err = ErrorKind::ENCODER_FAILED;
-                error!("Failed to get encoder. - ErrorKind: {:?}", err);
-                return Err(err);
-            }
+        let encoder_ptr = unsafe { drmModeGetEncoder(gpu, id) };
 
-            let encoder = encoder_ptr.as_ref().unwrap();
-            let encoder = Encoder {
-                id,
-                encoder_type: encoder.encoder_type,
-                possible_crtcs: encoder.possible_crtcs,
-                possible_clones: encoder.possible_clones,
-                crtc_id: encoder.crtc_id,
-            };
-
-            debug!("Found encoder: {}", encoder);
-
-            drmModeFreeEncoder(encoder_ptr);
-
-            Ok(encoder)
+        if encoder_ptr.is_null() {
+            let err = ErrorKind::ENCODER_FAILED;
+            error!("Failed to get encoder, is null. - ErrorKind: {:?}", err);
+            return Err(err);
         }
+
+        let encoder = unsafe { encoder_ptr.as_ref().unwrap() };
+        let encoder = Encoder {
+            id,
+            encoder_type: encoder.encoder_type,
+            possible_crtcs: encoder.possible_crtcs,
+            possible_clones: encoder.possible_clones,
+            crtc_id: encoder.crtc_id,
+        };
+
+        unsafe { drmModeFreeEncoder(encoder_ptr) };
+        Ok(encoder)
     }
 
     pub fn id(&self) -> u32 {
@@ -60,11 +57,5 @@ impl Encoder {
 
     pub fn crtc_id(&self) -> u32 {
         self.crtc_id
-    }
-}
-
-impl Display for Encoder {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Encoder {{ id: {}, encoder_type: {}, possible_crtcs: {}, possible_clones: {} }}", self.id, self.encoder_type,  self.possible_crtcs, self.possible_clones)
     }
 }
