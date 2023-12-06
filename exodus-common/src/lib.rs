@@ -6,5 +6,5 @@ pub mod consts;
 pub mod macros;
 pub mod memory;
 pub mod types;
-
 mod tests;
+
