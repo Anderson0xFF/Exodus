@@ -1,7 +1,9 @@
-use drm::{drmModeFreeCrtc, drmModeGetCrtc, drmModeModeInfo};
+use drm::{drmModeFreeCrtc, drmModeGetCrtc, drmModeModeInfo, drmModeSetCrtc};
 use exodus_errors::ErrorKind;
 
 use crate::{debug, error};
+
+use super::buffer::Buffer;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Crtc {
@@ -20,7 +22,7 @@ impl Crtc {
         debug!("Getting crtc...");
 
         if id == 0 {
-            let err = ErrorKind::EXODUS_CRTC_NOT_FOUND;
+            let err = ErrorKind::CRTC_NOT_FOUND;
             error!("Failed to get crtc. - ErrorKind: {:?}", err);
             return Err(err);
         }
@@ -28,7 +30,7 @@ impl Crtc {
         let crtc_ptr = unsafe { drmModeGetCrtc(device, id) };
 
         if crtc_ptr.is_null() {
-            let err = ErrorKind::EXODUS_CRTC_FAILED;
+            let err = ErrorKind::CRTC_FAILED;
             error!("Failed to get crtc. - ErrorKind: {:?}", err);
             return Err(err);
         }
@@ -83,5 +85,19 @@ impl Crtc {
 
     pub fn gamma_size(&self) -> i32 {
         self.gamma_size
+    }
+
+    pub fn set_buffer(&mut self, device: i32, connector_id: u32, buffer: &Buffer) -> Result<(), ErrorKind> {
+        unsafe {
+            let mut connector_id = connector_id;
+
+            let result = drmModeSetCrtc(device, self.id, buffer.handle(), 0, 0, &mut connector_id, 1, &mut self.mode);
+            if result != 0 {
+                let err = ErrorKind::CRTC_SET_FAILED;
+                error!("Failed to set crtc. - ErrorKind: {:?}", err);
+                return Err(err);
+            }
+            Ok(())
+        }
     }
 }

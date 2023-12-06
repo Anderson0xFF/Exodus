@@ -1,11 +1,8 @@
-use std::{fmt::Display, rc::Rc};
+use std::fmt::Display;
 use drm::{drmModeGetEncoder, drmModeFreeEncoder};
 use exodus_errors::ErrorKind;
 
 use crate::{debug, error};
-
-
-pub type EncoderRef = Rc<Encoder>;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Encoder {
@@ -23,7 +20,7 @@ impl Encoder {
             let encoder_ptr: *mut drm::_drmModeEncoder = drmModeGetEncoder(device, id);
 
             if encoder_ptr.is_null() {
-                let err = ErrorKind::EXODUS_ENCODER_FAILED;
+                let err = ErrorKind::ENCODER_FAILED;
                 error!("Failed to get encoder. - ErrorKind: {:?}", err);
                 return Err(err);
             }
