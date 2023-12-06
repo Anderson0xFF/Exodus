@@ -1,12 +1,10 @@
-use exodus_common::net::connection::Connection;
+use exodus_common::net::{connection::Connection, network_message::NetworkMessage};
 use exodus_errors::ErrorKind;
-use exodus_protocols::network_message::NetworkMessage;
 
 #[derive(Debug, Default)]
 pub struct Entity {
     conn: Option<Connection>,
     class: String,
-    title: String,
     version: u32,
     author: String,
     description: String,
@@ -27,10 +25,6 @@ impl Entity {
         self.class = class;
     }
 
-    pub(crate) fn set_title(&mut self, title: String) {
-        self.title = title;
-    }
-
     pub(crate) fn set_version(&mut self, version: u32) {
         self.version = version;
     }
@@ -45,10 +39,6 @@ impl Entity {
 
     pub fn class(&self) -> &str {
         &self.class
-    }
-
-    pub fn title(&self) -> &str {
-        &self.title
     }
 
     pub fn version(&self) -> u32 {
