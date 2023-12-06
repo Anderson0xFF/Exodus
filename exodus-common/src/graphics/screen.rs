@@ -2,10 +2,10 @@
 
 use drm::{drmModeConnection::DRM_MODE_CONNECTED, *};
 use exodus_errors::ErrorKind;
-use crate::{debug, error, graphics::encoders::Encoder};
-use super::{crtcs::Crtc, buffer::{Buffer, PixelFormat}, device::{DeviceID, native_device::NativeDeviceRef}};
+use crate::{debug, error, graphics::encoders::Encoder, consts::EXODUS_FRAMEBUFFER_MAX};
+use super::{crtcs::Crtc, buffer::{Buffer, PixelFormat, BufferFlag}, device::{GPUID, native_device::NativeDeviceRef}, framebuffer::Framebuffer};
 
-pub type Modes = Vec<drmModeModeInfo>;
+pub type Modes = Vec<*mut _drmModeModeInfo>;
 
 #[allow(non_camel_case_types)]
 #[derive(Debug, Clone, Copy)]
@@ -100,30 +100,51 @@ pub struct Screen {
     mmWidth: u32,
     mmHeight: u32,
     subpixel: u32,
-    mode: drmModeModeInfo,
+    mode: *mut _drmModeModeInfo,
     modes: Modes,
     encoder: Encoder,
     crtc: Crtc,
-    buffers: [Buffer; 2],
-    buffer_index: usize,
+    buffer: Buffer,
     connector: *mut _drmModeConnector,
-    device: DeviceID,
+    gpu: GPUID,
+    framebuffers: Vec<Framebuffer>,
 }
 
 impl Screen {
-    pub(crate) fn new(connector_id: u32, device: DeviceID, native_device: NativeDeviceRef) -> Result<Self, ErrorKind> 
+    pub(crate) fn new(connector_id: u32, gpu: GPUID, native_device: NativeDeviceRef) -> Result<Self, ErrorKind> 
     {   
-        let connector: *mut _drmModeConnector = unsafe { Self::get_connector(device, connector_id)? };
-        let modes: Vec<_drmModeModeInfo> = unsafe { Self::get_modes(connector)? };
+        debug!("Getting screen. - ConnectorID: {} - GPUID: {} - NativeDevice {:?}", connector_id, gpu, native_device);
+
+        let connector = unsafe { Self::get_connector(gpu, connector_id)? };
+        debug!("Found connector: {:?}", unsafe { connector.as_ref().unwrap() });
+
+        debug!("Getting modes...");
+        let modes = unsafe { Self::get_modes(connector) };
+        debug!("Found modes: {:?}", modes);
+
         let mode = modes[0];
-        let encoder = unsafe { Encoder::new((*connector).encoder_id, device)? };
-        let crtc = Crtc::new(encoder.crtc_id(), device)?;
-        let pixel_format = PixelFormat::XRGB8888;
-        let buffers = [
-            Buffer::create_native_buffer(mode.hdisplay as u32, mode.vdisplay as u32, pixel_format, &native_device)?,
-            Buffer::create_native_buffer(mode.hdisplay as u32, mode.vdisplay as u32, pixel_format, &native_device)?,
-        ];
+        debug!("Default mode: {:?}", unsafe { mode.as_ref().unwrap() });
         
+        debug!("Getting encoder...");
+        let encoder = unsafe { Encoder::new((*connector).encoder_id, gpu)? };
+        debug!("Found encoder: {:?}", encoder);
+
+        debug!("Getting crtc {}...", encoder.crtc_id());
+        let crtc = Crtc::new(encoder.crtc_id(), gpu, connector_id)?;
+        debug!("Found crtc: {:?}", crtc);
+
+        let pixel_format = PixelFormat::XRGB8888;
+        let flags = [BufferFlag::Scanout, BufferFlag::Rendering];
+        let width = unsafe { (*mode).hdisplay as u32 };
+        let height = unsafe { (*mode).vdisplay as u32 };
+
+        debug!("Creating screen buffer...");
+        let buffer = Buffer::create_native_buffer(width, height, pixel_format, &flags, &native_device)?;
+        debug!("Created screen buffer: {:?}", buffer);
+
+        let framebuffers = Vec::with_capacity(EXODUS_FRAMEBUFFER_MAX);
+        
+        debug!("Created screen: {:?}", unsafe { connector.as_ref().unwrap() });
         unsafe {
             Ok(Self {
                 id: (*connector).connector_id,
@@ -135,15 +156,15 @@ impl Screen {
                 modes,
                 encoder,
                 crtc,
-                buffers,
-                buffer_index: 0,
+                buffer,
                 connector,
-                device,
+                gpu,
+                framebuffers,
             })
         }
     }
 
-    unsafe fn get_connector(device: DeviceID, connector_id: u32) -> Result<*mut _drmModeConnector, ErrorKind> {
+    unsafe fn get_connector(device: GPUID, connector_id: u32) -> Result<*mut _drmModeConnector, ErrorKind> {
         debug!("Getting connector");
         let connector_ptr = drmModeGetConnector(device, connector_id);
 
@@ -170,13 +191,14 @@ impl Screen {
         Ok(connector_ptr)
     }
 
-    unsafe fn get_modes(connector: *mut _drmModeConnector) -> Result<Vec<_drmModeModeInfo>, ErrorKind> {
-        let mut modes: Vec<_drmModeModeInfo> = Vec::new();
+    unsafe fn get_modes(connector: *mut _drmModeConnector) -> Vec<*mut _drmModeModeInfo> {
+        let mut modes: Vec<*mut _drmModeModeInfo> = Vec::new();
         for i in 0..(*connector).count_modes {
-            let mode = (*connector).modes.offset(i as isize).as_ref().unwrap().clone();
+            let mode: *mut _drmModeModeInfo = (*connector).modes.offset(i as isize);
             modes.push(mode);
         }
-        Ok(modes)
+
+        modes
     }
 
     pub fn id(&self) -> u32 {
@@ -202,27 +224,48 @@ impl Screen {
     }
 
     pub fn modes(&self) -> &[_drmModeModeInfo] {
-        self.modes.as_ref()
+        unsafe { std::slice::from_raw_parts(self.mode, self.modes.len()) }
     }
 
     pub fn mode(&self) -> _drmModeModeInfo {
-        self.mode
+        unsafe { self.mode.as_ref().unwrap().clone() }
     }
 
     pub fn width(&self) -> u32 {
-        self.mode.hdisplay as u32
+        self.mode().hdisplay as u32
     }
 
     pub fn height(&self) -> u32 {
-        self.mode.vdisplay as u32
+        self.mode().vdisplay as u32
     }
 
-    pub fn write(&mut self, x: u32, y: u32, width: u32, height: u32, pixels: &[u32]) -> Result<(), ErrorKind> {
-        self.buffers[self.buffer_index].write(x, y, width, height, pixels)
+    pub fn draw(&mut self, x: u32, y: u32, width: u32, height: u32, stride: u32, pixels: &[u32]) -> Result<(), ErrorKind> {
+        self.buffer.write(x, y, width, height, stride, pixels)
     }
 
-    pub(crate) fn swap_buffers(&mut self) -> Result<(), ErrorKind> {
-        let buffer = &self.buffers[self.buffer_index];
-        self.crtc.set_buffer(self.device, self.id, buffer)
+    pub fn swap_buffers(&mut self) -> Result<(), ErrorKind> {
+        let framebuffer = Framebuffer::new_with_buffer(self.gpu, &self.buffer)?;
+        self.crtc.render_framebuffer(self.mode, &framebuffer)?;
+
+        if self.framebuffers.len() > EXODUS_FRAMEBUFFER_MAX {
+            self.framebuffers.remove(0);
+        }
+
+        self.framebuffers.push(framebuffer);
+        Ok(())
+    }
+
+    pub(crate) fn shutdown(&mut self) {
+        self.framebuffers.clear();
+        self.crtc.restore();
+    }
+}
+
+impl Drop for Screen {
+    fn drop(&mut self) {
+        unsafe {
+            self.shutdown();
+            drmModeFreeConnector(self.connector);
+        }
     }
 }
