@@ -1,6 +1,5 @@
 #![allow(non_camel_case_types)]
 
-use gbm::*;
 use drm::*;
 
 pub type ConnectorPtr = *mut drmModeConnector;
@@ -9,7 +8,6 @@ pub type EncoderPtr = *mut drmModeEncoder;
 pub type CrtcPtr = *mut drmModeCrtc;
 pub type FramebufferPtr = *mut drmModeFB;
 pub type PlanePtr = *mut drmModePlane;
-pub type NativeDevice = *mut gbm_device;
 
 pub type ModeInfo = drmModeModeInfo;
 
