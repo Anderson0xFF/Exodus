@@ -1,11 +1,11 @@
-use drm::{drmModeFreeCrtc, drmModeGetCrtc, drmModeModeInfo, drmModeSetCrtc};
+use drm::{drmModeFreeCrtc, drmModeGetCrtc, drmModeModeInfo, drmModeSetCrtc, drmModeModeInfoPtr};
 use exodus_errors::ErrorKind;
 
 use crate::{debug, error};
 
-use super::buffer::Buffer;
+use super::{framebuffer::Framebuffer, device::GPUID};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug)]
 pub struct Crtc {
     id: u32,
     buffer_id: u32,
@@ -14,11 +14,13 @@ pub struct Crtc {
     width : u32,
     height: u32,
     mode: drmModeModeInfo,
+    connector: u32,
     gamma_size: i32,
+    gpu: GPUID,
 }
 
 impl Crtc {
-    pub fn new(id: u32, device: i32) -> Result<Self, ErrorKind> {
+    pub fn new(id: u32, gpu: GPUID, connector: u32) -> Result<Self, ErrorKind> {
         debug!("Getting crtc...");
 
         if id == 0 {
@@ -27,7 +29,7 @@ impl Crtc {
             return Err(err);
         }
 
-        let crtc_ptr = unsafe { drmModeGetCrtc(device, id) };
+        let crtc_ptr = unsafe { drmModeGetCrtc(gpu, id) };
 
         if crtc_ptr.is_null() {
             let err = ErrorKind::CRTC_FAILED;
@@ -48,10 +50,11 @@ impl Crtc {
             height: crtc.height,
             mode: crtc.mode,
             gamma_size: crtc.gamma_size,
+            gpu,
+            connector,
         };
 
         debug!("Found Crtc: {:?}", crtc);
-
         Ok(crtc)
     }
 
@@ -87,17 +90,22 @@ impl Crtc {
         self.gamma_size
     }
 
-    pub fn set_buffer(&mut self, device: i32, connector_id: u32, buffer: &Buffer) -> Result<(), ErrorKind> {
+    pub fn render_framebuffer(&mut self, mode: drmModeModeInfoPtr, framebuffer: &Framebuffer) -> Result<(), ErrorKind> {
         unsafe {
-            let mut connector_id = connector_id;
-
-            let result = drmModeSetCrtc(device, self.id, buffer.handle(), 0, 0, &mut connector_id, 1, &mut self.mode);
-            if result != 0 {
-                let err = ErrorKind::CRTC_SET_FAILED;
-                error!("Failed to set crtc. - ErrorKind: {:?}", err);
-                return Err(err);
-            }
-            Ok(())
+            drmModeSetCrtc(self.gpu, self.id, framebuffer.id(), 0, 0, &mut self.connector, 1, mode);
         }
+        Ok(())
+    }
+
+    pub fn restore(&mut self) {
+        unsafe {
+            drmModeSetCrtc(self.gpu, self.id, self.buffer_id, self.x, self.y, &mut self.connector, 1, &mut self.mode);
+        }
+    }
+}
+
+impl Drop for Crtc {
+    fn drop(&mut self) {
+        self.restore();
     }
 }
