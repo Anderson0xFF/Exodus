@@ -1,9 +1,6 @@
+use exodus_common::net::network_message::NetworkMessage;
 use exodus_errors::ErrorKind;
-use exodus_protocols::{
-    network_message::NetworkMessage,
-    protocol_code::ProtocolCode,
-};
-
+use exodus_protocols::protocol_code::ProtocolCode;
 use crate::{client::Entity, display::Display};
 
 pub type Handler = fn(&mut Display, &mut Entity, NetworkMessage) -> Result<(), ErrorKind>;
@@ -78,13 +75,11 @@ impl ProtocolHandler {
 
     pub fn recv_entity_metadata(_: &mut Display, entity: &mut Entity, mut msg: NetworkMessage) -> Result<(), ErrorKind> {
         let class       = msg.read_string_utf8()?;
-        let title       = msg.read_string_utf8()?;
         let version        = msg.read_u32()?;
         let author      = msg.read_string_utf8()?;
         let description = msg.read_string_utf8()?;
 
         entity.set_class(class);
-        entity.set_title(title);
         entity.set_version(version);
         entity.set_author(author);
         entity.set_description(description);

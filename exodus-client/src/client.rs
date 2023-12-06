@@ -1,6 +1,5 @@
-use exodus_common::{net::connection::Connection, consts::EXODUS_DIRECTORY};
+use exodus_common::{net::{connection::Connection, network_message::NetworkMessage}, consts::EXODUS_DIRECTORY};
 use exodus_errors::ErrorKind;
-use exodus_protocols::network_message::NetworkMessage;
 use exodus_protocols::protocol_code::ProtocolCode::*;
 
 use crate::utils::{Display, GPU, Screen};
