@@ -40,14 +40,14 @@ impl Display {
         Ok(Self { id, gpus, listener })
     }
 
-    pub fn accept(&self) -> Result<Option<Entity>, ErrorKind> {
+    pub fn accept(&self) -> Option<Entity> {
         if let Ok((stream, _)) = self.listener.accept() {
             stream.set_nonblocking(true).unwrap();
             let conn = Connection::new(stream);
-            return Ok(Some(Entity::new(conn)));
+            return Some(Entity::new(conn));
         }
 
-        Ok(None)
+        None
     }
 
     
