@@ -1,7 +1,7 @@
 use std::{os::unix::net::UnixStream, io::{Read, Write}};
 use exodus_errors::ErrorKind;
-use exodus_protocols::network_message::NetworkMessage;
 use crate::if_;
+use super::network_message::NetworkMessage;
 
 
 #[derive(Debug)]
