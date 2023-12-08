@@ -15,8 +15,8 @@ pub struct Encoder {
 }
 
 impl Encoder {
-    pub fn new(id: u32, gpu: GPUID) -> Result<Self, ErrorKind> {
-        debug!("Getting encoder. - EncoderID: {} - GPUID: {}", id, gpu);
+    pub fn new(gpu: GPUID, id: u32) -> Result<Self, ErrorKind> {
+        debug!("Getting encoder. - GPUID: {} - EncoderID: {}", id, gpu);
 
         let encoder_ptr = unsafe { drmModeGetEncoder(gpu, id) };
 

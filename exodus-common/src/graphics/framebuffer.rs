@@ -11,7 +11,7 @@ pub struct Framebuffer {
 }
 
 impl Framebuffer {
-    pub fn new_with_buffer(gpu: GPUID, buffer: &Buffer) -> Result<Self, ErrorKind> {
+    pub fn new(gpu: GPUID, buffer: &Buffer) -> Result<Self, ErrorKind> {
         unsafe {
             let mut id = 0;
             let width = buffer.width();

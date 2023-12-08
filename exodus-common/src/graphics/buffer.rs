@@ -1,11 +1,14 @@
 use exodus_errors::ErrorKind;
-use gbm::gbm_bo_transfer_flags::GBM_BO_TRANSFER_WRITE;
-use gbm::{gbm_bo_format::*, gbm_bo_flags::*};
+use gbm::gbm_bo_transfer_flags::{GBM_BO_TRANSFER_WRITE, GBM_BO_TRANSFER_READ};
+use gbm::gbm_bo_flags::*;
 use gbm::*;
 use libc::c_void;
 
 
-use super::device::native_device::NativeDevice;
+use crate::enums::{PixelFormat, BufferFlag};
+use crate::{error, debug};
+
+use super::device::native_device::Device;
 
 #[derive(Debug)]
 pub enum Buffer {
@@ -30,14 +33,22 @@ pub enum Buffer {
 }
 
 impl Buffer {
-    pub fn create_native_buffer(width: u32, height: u32, format: PixelFormat, native_device: &NativeDevice) -> Result<Self, ErrorKind> {
-        let pixel_format = match format {
-            PixelFormat::XRGB8888 => GBM_BO_FORMAT_XRGB8888,
-            PixelFormat::ARGB8888 => GBM_BO_FORMAT_ARGB8888,
-        };
+    pub fn new(device_manager: &Device, width: u32, height: u32, format: PixelFormat, buffer_flags: &[BufferFlag]) -> Result<Self, ErrorKind> {
+        
+        let mut flags = 0;
+
+        for flag in buffer_flags {
+            match flag {
+                BufferFlag::Cursor => flags |= GBM_BO_USE_CURSOR,
+                BufferFlag::Linear => flags |= GBM_BO_USE_RENDERING,
+                BufferFlag::Protected => flags |= GBM_BO_USE_SCANOUT,
+                BufferFlag::Rendering => flags |= GBM_BO_USE_RENDERING,
+                BufferFlag::Scanout => flags |= GBM_BO_USE_SCANOUT,
+            }
+        }
 
         let buffer = unsafe {
-            gbm_bo_create(native_device.as_ptr(), width, height, pixel_format, GBM_BO_USE_SCANOUT | GBM_BO_USE_RENDERING)
+            gbm_bo_create(device_manager.as_ptr(), width, height, format as u32, flags)
         };
 
         if buffer.is_null() {
@@ -107,54 +118,79 @@ impl Buffer {
         }
     }
 
-    pub fn write(&mut self, x: u32, y: u32, width: u32, height: u32, data: &[u32]) -> Result<(), ErrorKind> {
+    pub fn write(&mut self, x: u32, y: u32, width: u32, height: u32, pixels: &[u32]) -> Result<(), ErrorKind> {
+        debug!("Writing buffer. - X: {}, Y: {}, Width: {}, Height: {}", x, y, width, height);
+
+        if pixels.len() != (width * height) as usize {
+            error!("Invalid pixel length. - ErrorKind: {:?}", ErrorKind::BUFFER_INVALID_PIXELS);
+            return Err(ErrorKind::BUFFER_INVALID_PIXELS);
+        }
+
+        else if x + width > self.width() || y + height > self.height() {
+            error!("Buffer is out of bounds. - ErrorKind: {:?}", ErrorKind::BUFFER_OUT_OF_BOUNDS);
+            return Err(ErrorKind::BUFFER_OUT_OF_BOUNDS);
+        }
+
         match self {
             Self::Legacy { .. } => todo!(),
-            Self::Native { .. } => self.write_native(x, y, width, height, data),
+            Self::Native { .. } => self.write_buffer(x, y, width, height, pixels),
         }
     }
 
-    fn write_native(&self, x: u32, y: u32, width: u32, height: u32, data: &[u32]) -> Result<(), ErrorKind> {
-        let mut stride = self.stride();
+    fn write_buffer(&self, x: u32, y: u32, width: u32, height: u32, pixels: &[u32]) -> Result<(), ErrorKind> {
         let mut map_data = std::ptr::null_mut();
         let bo = self.buffer() as *mut gbm_bo;
-        let pixels = unsafe { gbm_bo_map(bo, x, y, width, height, GBM_BO_TRANSFER_WRITE, &mut stride, &mut map_data) };
+        let mut stride = self.stride();
 
-        if pixels == libc::MAP_FAILED {
+        let src = pixels.as_ptr() as *const c_void;
+        let dst = unsafe { gbm_bo_map(bo, x, y, width, height, GBM_BO_TRANSFER_WRITE, &mut stride, &mut map_data) };
+        let count = (width * height * 4) as usize;
+
+        if dst == libc::MAP_FAILED {
+            error!("Failed to map buffer. - ErrorKind: {:?}", ErrorKind::BUFFER_MAPPING_FAILED);
             return Err(ErrorKind::BUFFER_MAPPING_FAILED);
         }
 
         unsafe { 
-            std::ptr::copy_nonoverlapping(data.as_ptr() as *const c_void, pixels, data.len());
+            std::ptr::copy_nonoverlapping(src, dst, count);
             gbm_bo_unmap(bo, map_data);
         };
         Ok(())
     }
 
     pub fn read(&self, x: u32, y: u32, width: u32, height: u32) -> Result<Vec<u32>, ErrorKind> {
+        debug!("Reading buffer. - X: {}, Y: {}, Width: {}, Height: {}", x, y, width, height);
+
+        if x + width > self.width() || y + height > self.height() {
+            error!("Buffer is out of bounds. - ErrorKind: {:?}", ErrorKind::BUFFER_OUT_OF_BOUNDS);
+            return Err(ErrorKind::BUFFER_OUT_OF_BOUNDS);
+        }
+
         match self {
             Self::Legacy { .. } => todo!(),
-            Self::Native { .. } => self.read_native(x, y, width, height),
+            Self::Native { .. } => self.read_buffer(x, y, width, height),
         }
     }
 
-    fn read_native(&self, x: u32, y: u32, width: u32, height: u32) -> Result<Vec<u32>, ErrorKind> {
-        let mut stride = self.stride();
+    fn read_buffer(&self, x: u32, y: u32, width: u32, height: u32) -> Result<Vec<u32>, ErrorKind> {
         let mut map_data = std::ptr::null_mut();
         let bo = self.buffer() as *mut gbm_bo;
-        let pixels = unsafe { gbm_bo_map(bo, x, y, width, height, GBM_BO_TRANSFER_WRITE, &mut stride, &mut map_data) };
+        let mut stride = self.stride();
 
-        if pixels == libc::MAP_FAILED {
+        let src = unsafe { gbm_bo_map(bo, x, y, width, height, GBM_BO_TRANSFER_READ, &mut stride, &mut map_data) };
+        let count = (width * height * 4) as usize;
+        let mut dst = Vec::with_capacity(count);
+
+        if src == libc::MAP_FAILED {
+            error!("Failed to map buffer. - ErrorKind: {:?}", ErrorKind::BUFFER_MAPPING_FAILED);
             return Err(ErrorKind::BUFFER_MAPPING_FAILED);
         }
 
-        let mut data = Vec::new();
         unsafe {
-            data.set_len(width as usize * height as usize);
-            std::ptr::copy_nonoverlapping(pixels, data.as_mut_ptr() as *mut c_void, data.len());
+            std::ptr::copy_nonoverlapping(src, dst.as_mut_ptr() as *mut c_void, count);
             gbm_bo_unmap(bo, map_data);
         };
-        Ok(data)
+        Ok(dst)
     }
 
     fn buffer(&self) -> *mut c_void {
@@ -164,54 +200,4 @@ impl Buffer {
         }
     }
     
-}
-
-#[derive(Debug, Copy, Clone)]
-pub enum PixelFormat {
-    XRGB8888,
-    ARGB8888,
-}
-
-impl From<u32> for PixelFormat {
-    fn from(format: u32) -> Self {
-        match format {
-            GBM_BO_FORMAT_XRGB8888 => PixelFormat::XRGB8888,
-            GBM_BO_FORMAT_ARGB8888 => PixelFormat::ARGB8888,
-            _ => PixelFormat::XRGB8888,
-        }
-    }
-}
-
-impl From<i32> for PixelFormat {
-    fn from(format: i32) -> Self {
-        match format as u32 {
-            GBM_BO_FORMAT_XRGB8888 => PixelFormat::XRGB8888,
-            GBM_BO_FORMAT_ARGB8888 => PixelFormat::ARGB8888,
-            _ => PixelFormat::XRGB8888,
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub enum SubPixel {
-    Unknown = 1,
-    HorizontalRGB,
-    HorizontalBGR,
-    VerticalRGB,
-    VerticalBGR,
-    None,
-}
-
-impl From<u32> for SubPixel {
-    fn from(subpixel: u32) -> Self {
-        match subpixel {
-            1 => SubPixel::Unknown,
-            2 => SubPixel::HorizontalRGB,
-            3 => SubPixel::HorizontalBGR,
-            4 => SubPixel::VerticalRGB,
-            5 => SubPixel::VerticalBGR,
-            6 => SubPixel::None,
-            _ => SubPixel::Unknown,
-        }
-    }
 }
