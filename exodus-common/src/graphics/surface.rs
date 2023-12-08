@@ -8,7 +8,8 @@ use gbm::{
 };
 use libc::c_void;
 
-use super::{screen::Screen, buffer::{PixelFormat, BufferFlag}, device::native_device::NativeDeviceRef};
+use crate::enums::{BufferFlag, PixelFormat};
+use super::device::native_device::DeviceRef;
 
 #[derive(Debug)]
 pub struct Surface {
@@ -16,11 +17,11 @@ pub struct Surface {
     height: u32,
     format: PixelFormat,
     surface: *mut gbm::gbm_surface,
-    native_device: NativeDeviceRef,
+    device: DeviceRef,
 }
 
 impl Surface {
-    pub fn new(width: u32, height: u32, format: PixelFormat, surface_flags: &[BufferFlag], native_device: NativeDeviceRef) -> Result<Self, ErrorKind> {
+    pub fn new(width: u32, height: u32, format: PixelFormat, surface_flags: &[BufferFlag], device: DeviceRef) -> Result<Self, ErrorKind> {
 
         let mut flags = 0;
 
@@ -34,12 +35,12 @@ impl Surface {
             }
         }
 
-        let surface = unsafe { gbm_surface_create(native_device.as_ptr(), width, height, format as u32, flags) };
+        let surface = unsafe { gbm_surface_create(device.as_ptr(), width, height, format as u32, flags) };
         if surface.is_null() {
             return Err(ErrorKind::SURFACE_CREATE_FAILED);
         }
         
-        let surface = Surface { width, height, format, surface, native_device };
+        let surface = Surface { width, height, format, surface, device };
         Ok(surface)
     }
 
@@ -141,16 +142,4 @@ impl SurfaceLock {
         };
         Ok(pixels.to_vec())
     }
-}
-
-#[derive(Debug, Copy, Clone)]
-pub enum SurfaceTransform {
-    Normal = 0,
-    Rotate90,
-    Rotate180,
-    Rotate270,
-    FlipHorizontal,
-    FlipVertical,
-    Rotate90FlipHorizontal,
-    Rotate90FlipVertical,
 }
