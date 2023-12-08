@@ -50,7 +50,6 @@ impl Display {
         None
     }
 
-    
     pub fn id(&self) -> i32 {
         self.id
     }
