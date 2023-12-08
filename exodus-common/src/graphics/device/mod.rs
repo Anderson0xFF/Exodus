@@ -5,12 +5,14 @@ pub mod native_device;
 use std::fs::OpenOptions;
 use std::{fs::File, os::fd::AsRawFd};
 use std::os::unix::fs::OpenOptionsExt;
-use drm::{drmModeGetResources, drmModeFreeResources};
+use drm::*;
 use exodus_errors::ErrorKind;
 use crate::*;
 use crate::consts::DRI_DIRECTORY;
-use crate::graphics::device::native_device::NativeDevice;
-use self::native_device::NativeDeviceRef;
+use crate::enums::{ScreenFlags, Vendor};
+use crate::graphics::device::native_device::Device;
+use crate::graphics::screen::connector::Connector;
+use self::native_device::DeviceRef;
 
 use super::screen::Screen;
 
@@ -18,34 +20,39 @@ pub type GPUID = i32;
 
 #[derive(Debug)]
 pub struct GPU {
-    file: File,
+    card: File,
+    vendor: Vendor,
     width: u32,
     height: u32,
     screens: Vec<Screen>,
-    native_device: NativeDeviceRef,
+    device: Option<DeviceRef>,
 }
 
 impl GPU {
     
     fn load(path: &str) -> Result<Self, ErrorKind> {
-        info!("Loading gpu: \"{}\"", path);
+        info!("Loading GPU: \"{}\"", path);
 
-        let file = OpenOptions::new()
+        let card = OpenOptions::new()
             .read(true)
             .write(true)
-            .custom_flags(libc::O_RDWR | libc::O_CLOEXEC)
+            .custom_flags(libc::O_RDWR | libc::O_CLOEXEC | libc::O_NONBLOCK)
             .open(path);
 
-        if let Err(_) = file {
+        if let Err(_) = card {
             let err = ErrorKind::GPU_LOAD_FAILED;
             error!("Failed to load gpu: \"{}\" - ErrorKind: {:?}", path, err);
             return Err(err);
         }
 
-        let file = file.unwrap();
-        
+        let card = card.unwrap();
+        let gpu = card.as_raw_fd();
+        let vendor = unsafe { Self::get_card_vendor(gpu) };
+        let vendor = Vendor::from(vendor);
+
+
         debug!("Getting gpu resources...");
-        let resources_ptr = unsafe { drmModeGetResources(file.as_raw_fd()) };
+        let resources_ptr: *mut drm::_drmModeRes = unsafe { drmModeGetResources(gpu) };
         if resources_ptr.is_null() {
             let err = ErrorKind::GPU_RESOURCES_FAILED;
             error!("Failed to get gpu resources. - ErrorKind: {:?}", err);
@@ -54,34 +61,47 @@ impl GPU {
 
         let resources = unsafe{ resources_ptr.as_ref().unwrap() };
 
-        debug!("Creating NativeDevice...");
-        let native_device = NativeDevice::new(file.as_raw_fd())?;
+        let device = Device::new(gpu)?;
+
 
         info!("Detecting screens...");
         let mut screens = Vec::new();
         for i in 0..resources.count_connectors {
             let connector_id = unsafe { *resources.connectors.offset(i as isize).as_ref().unwrap() };
-            if let Ok(screen) = Screen::new(connector_id, file.as_raw_fd(), native_device.clone()) {
-                info!("Screen {}x{}", screen.width(), screen.height());
+            if let Ok(Some(connector)) = Connector::new(gpu, connector_id) {
+                let screen = Screen::new(device.clone(), connector, &[ScreenFlags::TripleBuffered])?;
+                info!("Screen - ID: {} Port: {:?} - Resolution: {}x{}", screen.id(), screen.connector_type(), screen.width(), screen.height());
                 screens.push(screen);
             }
         }
 
         unsafe { drmModeFreeResources(resources_ptr) };
-        info!("Graphic device \"{}\" loaded.", path);
+        info!("GPU \"{}\" loaded.", path);
 
         Ok(GPU {
-            file,
+            card,
             screens,
             width: resources.max_width,
             height: resources.max_height,
-            native_device,
+            device: Some(device),
+            vendor,
         })
     }
 
     #[inline]
     pub fn id(&self) -> i32 {
-        self.file.as_raw_fd()
+        self.card.as_raw_fd()
+    }
+
+    unsafe fn get_card_vendor(gpu: GPUID) -> u16 {
+        let mut device_ptr = std::ptr::null_mut();
+        drmGetDevice(gpu, &mut device_ptr);
+
+        let drm_device = device_ptr.as_ref().unwrap() ;
+        let vendor_id = drm_device.deviceinfo.pci.as_ref().unwrap().vendor_id;
+
+        drmFreeDevice(&mut device_ptr);
+        return vendor_id;
     }
 
     pub fn search_gpus() -> Result<Vec<GPU>, ErrorKind> {
@@ -105,12 +125,12 @@ impl GPU {
             return Err(ERROR);
         }
 
-        let graphics_devices_paths = dri_directory.unwrap()
+        let cards = dri_directory.unwrap()
             .map(|res| res.map(|e| e.path().to_str().unwrap().to_string()))
             .collect::<Result<Vec<_>, std::io::Error>>().unwrap();
 
         let mut gpus = Vec::new();
-        for path in graphics_devices_paths.iter().filter(|x| x.contains("card")) {
+        for path in cards.iter().filter(|x| x.contains("card")) {
             gpus.push(GPU::load(path)?);
         }
 
@@ -124,28 +144,29 @@ impl GPU {
         Ok(gpus)
     }
 
-    pub fn native_device(&self) -> NativeDeviceRef {
-        self.native_device.clone()
+    pub fn device(&self) -> Option<DeviceRef> {
+        self.device.clone()
     }
 
     pub fn screens(&self) -> &[Screen] {
         self.screens.as_ref()
     }
 
-    pub fn get_screen_from_id(&mut self, id: u32) -> Option<&mut Screen> {
+    pub fn get_screen(&mut self, id: u32) -> Option<&mut Screen> {
         self.screens.iter_mut().find(|x| x.id() == id)
     }
 
-    pub fn get_screen_from_index(&mut self, index: usize) -> Option<&mut Screen> {
-        self.screens.get_mut(index)
+    pub fn dispose(&mut self) {
+        debug!("Disposing GPU: \"{}\"", self.id());
+        self.screens.iter_mut().for_each(|screen| {
+            screen.dispose();
+        });
     }
 
 }
 
 impl Drop for GPU {
     fn drop(&mut self) {
-        for screen in self.screens.iter_mut() {
-            screen.shutdown();
-        }
+        self.dispose();
     }
 }
