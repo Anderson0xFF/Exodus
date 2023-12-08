@@ -23,12 +23,16 @@ pub enum ErrorKind {
 
     //NativeDevice
     NATIVE_DEVICE_NOT_FOUND,
-    NATIVE_DEVICE_CREATE_FAILED,
+    DEVICE_MANAGER_CREATE_FAILED,
 
     // Buffer
     BUFFER_EMPTY,
     BUFFER_CREATE_FAILED,
     BUFFER_MAPPING_FAILED,
+    /// This error is thrown when the buffer is out of bounds.
+    BUFFER_OUT_OF_BOUNDS,
+    /// This error is thrown when the pixel buffer length is not equal to width * height.
+    BUFFER_INVALID_PIXELS,
 
     // Surface
     SURFACE_CREATE_FAILED,
@@ -50,8 +54,8 @@ pub enum ErrorKind {
     ENCODER_FAILED,
 
     // Screen
-    SCREEN_CONNECTOR_FAILED,
-    SCREEN_CONNECTOR_MODE_FAILED,
+    CONNECTOR_FAILED,
+    CONNECTOR_MODE_FAILED,
     SCREEN_DISCONNECTED,
     SCREEN_NOT_FOUND,
 
