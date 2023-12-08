@@ -1,4 +1,4 @@
-use exodus_common::graphics::{screen::ConnectorType, buffer::SubPixel};
+use exodus_common::enums::*;
 
 #[derive(Debug, Clone)]
 pub struct Display {
