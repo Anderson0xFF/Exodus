@@ -1,4 +1,3 @@
-#![allow(non_upper_case_globals)]
 use exodus_common::{
     consts::*,
     graphics::device::GPU,
@@ -12,9 +11,9 @@ use crate::client::Entity;
 
 #[derive(Debug)]
 pub struct Display {
-    id: i32,
-    gpus: Vec<GPU>,
-    listener: UnixListener,
+    id:         i32,
+    gpus:       Vec<GPU>,
+    listener:   UnixListener,
 }
 
 impl Display {
@@ -73,7 +72,7 @@ impl Display {
 
             logger::Logger::init(level, logger_dir.as_str());
         } else {
-            logger::Logger::init(logger::Level::Info, logger_dir.as_str());
+            logger::Logger::init(logger::Level::Debug, logger_dir.as_str());
         }
     }
 
@@ -99,10 +98,8 @@ impl Display {
         }
     }
 
-}
-
-impl Drop for Display {
-    fn drop(&mut self) {
+    fn dispose(&mut self) {
+        debug!("Disposing display...");
         if let Ok(id) = std::env::var(EXODUS_DISPLAY) {
             if id == self.id.to_string() {
                 std::env::remove_var(EXODUS_DISPLAY);
@@ -113,5 +110,17 @@ impl Drop for Display {
         if path::Path::new(&display).exists() {
             std::fs::remove_file(&display).unwrap();
         }
+
+        for gpu in self.gpus.iter_mut() {
+            gpu.dispose();
+        }
+        debug!("Display disposed.");
+    }
+
+}
+
+impl Drop for Display {
+    fn drop(&mut self) {
+        self.dispose();
     }
 }

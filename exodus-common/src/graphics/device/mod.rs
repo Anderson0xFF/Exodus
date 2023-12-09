@@ -20,12 +20,12 @@ pub type GPUID = i32;
 
 #[derive(Debug)]
 pub struct GPU {
-    card: File,
-    vendor: Vendor,
-    width: u32,
-    height: u32,
-    screens: Vec<Screen>,
-    device: Option<DeviceRef>,
+    card:       File,
+    vendor:     Vendor,
+    width:      u32,
+    height:     u32,
+    screens:    Vec<Screen>,
+    device:     Option<DeviceRef>,
 }
 
 impl GPU {

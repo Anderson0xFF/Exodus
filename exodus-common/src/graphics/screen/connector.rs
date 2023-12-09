@@ -112,12 +112,12 @@ impl Connector {
         self.subpixel
     }
 
-    pub fn get_mode(&self, index: u32) -> Option<drmModeModeInfoPtr> {
-        if index as usize >= self.modes.len() {
+    pub fn get_mode(&self, id: u32) -> Option<drmModeModeInfoPtr> {
+        if id as usize >= self.modes.len() {
             return None;
         }
 
-        Some(self.modes[index as usize])
+        Some(self.modes[id as usize])
     }
 
     pub fn modes(&self) -> &[*mut drm::_drmModeModeInfo] {

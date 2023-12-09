@@ -7,10 +7,11 @@ pub type Handler = fn(&mut Display, &mut Entity, NetworkMessage) -> Result<(), E
 
 #[derive(Debug)]
 pub struct ProtocolHandler {
-    dpy: Display,
+    dpy:                    Display,
     recv_entity_metadata:   Handler,
     send_display_data:      Handler,
     send_gpu_data:          Handler,
+    send_screen_data:       Handler,
 }
 
 impl ProtocolHandler {
@@ -20,15 +21,16 @@ impl ProtocolHandler {
             recv_entity_metadata:   Self::recv_entity_metadata,
             send_display_data:      Self::send_display_data,
             send_gpu_data:          Self::send_gpu_data,
+            send_screen_data:       Self::send_screen_data,
         }
     }
 
     pub fn set_protocol_handler(&mut self, code: ProtocolCode, callback: Handler) -> Result<(), ErrorKind> {
         match code {
-            ProtocolCode::ProtocolEntityInit        => self.recv_entity_metadata = callback,
-            ProtocolCode::ProtocolDisplayData       => self.send_display_data = callback,
-            ProtocolCode::ProtocolGPUData           => self.send_gpu_data = callback,
-            ProtocolCode::ProtocolScreenData        => todo!(),
+            ProtocolCode::ProtocolEntityInit        => self.recv_entity_metadata    = callback,
+            ProtocolCode::ProtocolDisplayData       => self.send_display_data       = callback,
+            ProtocolCode::ProtocolGPUData           => self.send_gpu_data           = callback,
+            ProtocolCode::ProtocolScreenData        => self.send_screen_data        = callback,
             ProtocolCode::ProtocolScreenModeData    => todo!(),
             ProtocolCode::ProtocolGPURendering      => todo!(),
             _ => todo!(),
@@ -64,7 +66,10 @@ impl ProtocolHandler {
                 let send_gpu_data: Handler = self.send_gpu_data;
                 send_gpu_data(&mut self.dpy, entity, msg)?;
             }
-            ProtocolCode::ProtocolScreenData        => todo!(),
+            ProtocolCode::ProtocolScreenData        => {
+                let send_screen_data: Handler = self.send_screen_data;
+                send_screen_data(&mut self.dpy, entity, msg)?;
+            }
             ProtocolCode::ProtocolScreenModeData    => todo!(),
             ProtocolCode::ProtocolGPURendering      => todo!(),
             _ => todo!(),
@@ -133,7 +138,7 @@ impl ProtocolHandler {
         let gpu = input.read_i32()?;
         let gpu = dpy.gpu(gpu).unwrap();
         let screen = input.read_u32()?;
-        let screen = gpu.get_screen_from_id(screen).unwrap();
+        let screen = gpu.get_screen(screen).unwrap();
 
         let mut msg = NetworkMessage::new(ProtocolCode::ProtocolScreenData);
         msg.write_u32(screen.id());
@@ -143,16 +148,16 @@ impl ProtocolHandler {
         msg.write_u32(screen.subpixel());
 
         // Mode
-        msg.write_u32(0);
+        msg.write_u32(screen.mode());
 
         // Modes count
-        let modes = screen.modes();
-        msg.write_u32(modes.len().try_into().unwrap());
+        // let modes = screen.modes();
+        // msg.write_u32(modes.len().try_into().unwrap());
 
-        // Modes
-        for i in 0..modes.len() {
-            msg.write_u32(i.try_into().unwrap());
-        }
+        // // Modes
+        // for i in 0..modes.len() {
+        //     msg.write_u32(i.try_into().unwrap());
+        // }
 
         entity.send(msg);
         Ok(())
