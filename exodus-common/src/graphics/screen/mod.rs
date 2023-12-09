@@ -9,13 +9,13 @@ pub mod connector;
 
 #[derive(Debug)]
 pub struct Screen {
-    device: DeviceRef,
-    mode: u32,
-    index: usize,
-    buffers: Vec<Buffer>,
-    framebuffers: Vec<Framebuffer>,
-    connector: Connector,
-    crtc: CRTC,
+    device:         DeviceRef,
+    mode:           u32,
+    index:          usize,
+    buffers:        Vec<Buffer>,
+    framebuffers:   Vec<Framebuffer>,
+    connector:      Connector,
+    crtc:           CRTC,
 }
 
 impl Screen {
@@ -25,20 +25,33 @@ impl Screen {
         let crtc_id = connector.encoder().crtc_id();
         let crtc = CRTC::new(device.id(), crtc_id)?;
 
+
+        let mut mode_id = 0;
         let mut width = 0;
         let mut height = 0;
         let mut refresh = 0;
-        let mut mode_id = 0;
 
-        debug!("Detecting optimal resolution...");
-        for (id, mode) in connector.modes().iter().enumerate() {
-            let mode = unsafe { mode.as_ref().unwrap() };
-            if mode.hdisplay as u32 > width && mode.vdisplay as u32 > height {
-                width = mode.hdisplay  as u32;
-                height = mode.vdisplay  as u32;
-                refresh = mode.vrefresh;
-                mode_id = id;
+        if flags.contains(&ScreenFlags::OptimalResolution) {
+            debug!("Detecting optimal resolution...");
+
+            for (id, mode) in connector.modes().iter().enumerate() {
+                let mode = unsafe { mode.as_ref().unwrap() };
+                if mode.hdisplay as u32 > width && mode.vdisplay as u32 > height {
+                    width = mode.hdisplay  as u32;
+                    height = mode.vdisplay  as u32;
+                    mode_id = id as u32;
+                    refresh = mode.vrefresh;
+                }
             }
+        }
+        else 
+        {
+            debug!("Detecting default resolution...");
+            let mode = unsafe { connector.get_mode(0).unwrap().as_ref().unwrap() };
+            mode_id = 0;
+            width = mode.hdisplay as u32;
+            height = mode.vdisplay as u32;
+            refresh = mode.vrefresh;
         }
 
         let mut buffers: Vec<Buffer> = Vec::new();
@@ -49,8 +62,10 @@ impl Screen {
             match flag {
                 ScreenFlags::DoubleBuffered => buffer_count = 2,
                 ScreenFlags::TripleBuffered => buffer_count = 3,
+                _ => (),
             }
         }
+
 
         debug!("Creating buffers...");
         const FLAGS: [BufferFlag; 2] = [BufferFlag::Scanout, BufferFlag::Rendering];
@@ -125,6 +140,9 @@ impl Screen {
         self.crtc.restore(&mut [self.id()])
     }
 
+    pub fn mode(&self) -> u32 {
+        self.mode
+    }
 }
 
 impl Drop for Screen {
