@@ -25,6 +25,7 @@ impl ProtocolHandler {
         }
     }
 
+    /// Sets the protocol handler for the given protocol code.
     pub fn set_protocol_handler(&mut self, code: ProtocolCode, callback: Handler) -> Result<(), ErrorKind> {
         match code {
             ProtocolCode::ProtocolEntityInit        => self.recv_entity_metadata    = callback,
@@ -39,6 +40,7 @@ impl ProtocolHandler {
         Ok(())
     }
 
+    /// Processes the request from the given entity.
     pub fn process_request(&mut self, entity: &mut Entity) -> Result<(), ErrorKind> {
         let msg = entity.get_request()?;
 
@@ -66,7 +68,8 @@ impl ProtocolHandler {
                 let send_gpu_data: Handler = self.send_gpu_data;
                 send_gpu_data(&mut self.dpy, entity, msg)?;
             }
-            ProtocolCode::ProtocolScreenData        => {
+            ProtocolCode::ProtocolScreenData
+            => {
                 let send_screen_data: Handler = self.send_screen_data;
                 send_screen_data(&mut self.dpy, entity, msg)?;
             }
@@ -117,7 +120,7 @@ impl ProtocolHandler {
     pub fn send_gpu_data(dpy: &mut Display, entity: &mut Entity, mut msg: NetworkMessage) -> Result<(), ErrorKind> {
         let id = msg.read_i32()?;
         
-        if let Some(gpu) = dpy.gpu(id) {
+        if let Some(gpu) = dpy.get_gpu(id) {
             let mut msg = NetworkMessage::new(ProtocolCode::ProtocolGPUData);
             msg.write_i32(gpu.id());
             msg.write_i32(-1);
@@ -136,7 +139,7 @@ impl ProtocolHandler {
 
     pub fn send_screen_data(dpy: &mut Display, entity: &mut Entity, mut input: NetworkMessage) -> Result<(), ErrorKind> {
         let gpu = input.read_i32()?;
-        let gpu = dpy.gpu(gpu).unwrap();
+        let gpu = dpy.get_gpu(gpu).unwrap();
         let screen = input.read_u32()?;
         let screen = gpu.get_screen(screen).unwrap();
 

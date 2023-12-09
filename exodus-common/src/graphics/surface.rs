@@ -8,7 +8,7 @@ use gbm::{
 };
 use libc::c_void;
 
-use crate::enums::{BufferFlag, PixelFormat};
+use crate::{enums::{BufferFlag, PixelFormat}, verbose, error, debug};
 use super::device::native_device::DeviceRef;
 
 #[derive(Debug)]
@@ -22,21 +22,23 @@ pub struct Surface {
 
 impl Surface {
     pub fn new(width: u32, height: u32, format: PixelFormat, surface_flags: &[BufferFlag], device: DeviceRef) -> Result<Self, ErrorKind> {
-
+        debug!("Creating surface. - Width: {}, Height: {}, Format: {:?}, Flags: {:?}", width, height, format, surface_flags);
+        
         let mut flags = 0;
 
         for flag in surface_flags {
             match flag {
-                BufferFlag::Cursor => flags |= GBM_BO_USE_CURSOR,
-                BufferFlag::Linear => flags |= GBM_BO_USE_RENDERING,
-                BufferFlag::Protected => flags |= GBM_BO_USE_SCANOUT,
-                BufferFlag::Rendering => flags |= GBM_BO_USE_RENDERING,
-                BufferFlag::Scanout => flags |= GBM_BO_USE_SCANOUT,
+                BufferFlag::Cursor      => flags |= GBM_BO_USE_CURSOR,
+                BufferFlag::Linear      => flags |= GBM_BO_USE_RENDERING,
+                BufferFlag::Protected   => flags |= GBM_BO_USE_SCANOUT,
+                BufferFlag::Rendering   => flags |= GBM_BO_USE_RENDERING,
+                BufferFlag::Scanout     => flags |= GBM_BO_USE_SCANOUT,
             }
         }
 
         let surface = unsafe { gbm_surface_create(device.as_ptr(), width, height, format as u32, flags) };
         if surface.is_null() {
+            error!("Failed to create surface. - ErrorKind: {:?}", ErrorKind::SURFACE_CREATE_FAILED);
             return Err(ErrorKind::SURFACE_CREATE_FAILED);
         }
         
@@ -53,8 +55,12 @@ impl Surface {
     }
 
     pub fn lock(&self) -> Result<SurfaceLock, ErrorKind> {
+        verbose!("Locking surface.");
+
         let data = unsafe { gbm_surface_lock_front_buffer(self.surface) };
+
         if data.is_null() {
+            error!("Failed to lock surface. - ErrorKind: {:?}", ErrorKind::SURFACE_LOCK_FAILED);
             return Err(ErrorKind::SURFACE_LOCK_FAILED);
         }
 
@@ -95,36 +101,67 @@ impl SurfaceLock {
         self.height
     }
 
-    pub fn write(&mut self, x: u32, y: u32, width: u32, height: u32, data: &[u32]) -> Result<(), ErrorKind> {
-        let mut stride = self.stride();
-        let mut map_data = std::ptr::null_mut();
-        let pixels = unsafe { gbm_bo_map(self.buffer, x, y, width, height, GBM_BO_TRANSFER_WRITE, &mut stride, &mut map_data) };
+    /// Write pixels to the buffer.
+    pub fn write(&mut self, x: u32, y: u32, width: u32, height: u32, pixels: &[u32]) -> Result<(), ErrorKind> {
+        verbose!("Writing buffer. - X: {}, Y: {}, Width: {}, Height: {}", x, y, width, height);
 
-        if pixels == libc::MAP_FAILED {
-            return Err(ErrorKind::SURFACE_LOCK_MAPPING_FAILED);
+        if pixels.len() != (width * height) as usize {
+            error!("Invalid pixel length. - ErrorKind: {:?}", ErrorKind::BUFFER_INVALID_PIXELS);
+            return Err(ErrorKind::BUFFER_INVALID_PIXELS);
+        } 
+        
+        else if x + width > self.width() || y + height > self.height() {
+            error!("Buffer is out of bounds. - ErrorKind: {:?}", ErrorKind::BUFFER_OUT_OF_BOUNDS);
+            return Err(ErrorKind::BUFFER_OUT_OF_BOUNDS);
+        }
+
+        let mut map_data = std::ptr::null_mut();
+        let bo = self.buffer;
+        let mut stride = self.stride();
+
+        let src = pixels.as_ptr() as *const c_void;
+        let dst = unsafe { gbm_bo_map(bo, x, y, width, height, GBM_BO_TRANSFER_WRITE, &mut stride, &mut map_data) };
+        let count = (width * height * 4) as usize;
+
+        if dst == libc::MAP_FAILED {
+            error!("Failed to map buffer. - ErrorKind: {:?}", ErrorKind::BUFFER_MAPPING_FAILED);
+            return Err(ErrorKind::BUFFER_MAPPING_FAILED);
         }
 
         unsafe { 
-            std::ptr::copy_nonoverlapping(data.as_ptr() as *const c_void, pixels, data.len());
-            gbm_bo_unmap(self.buffer, map_data);
+            std::ptr::copy_nonoverlapping(src, dst, count);
+            gbm_bo_unmap(bo, map_data);
         };
         Ok(())
     }
 
+    /// Read pixels from the buffer.
     pub fn read(&mut self, x: u32, y: u32, width: u32, height: u32) -> Result<Vec<u32>, ErrorKind> {
-        let mut stride = self.stride();
-        let mut map_data = std::ptr::null_mut();
-        let pixels_ptr = unsafe { gbm_bo_map(self.buffer, x, y, width, height, GBM_BO_TRANSFER_READ, &mut stride, &mut map_data) };
+        verbose!("Reading buffer. - X: {}, Y: {}, Width: {}, Height: {}", x, y, width, height);
 
-        if pixels_ptr == libc::MAP_FAILED {
-            return Err(ErrorKind::SURFACE_LOCK_MAPPING_FAILED);
+        if x + width > self.width() || y + height > self.height() {
+            error!("Buffer is out of bounds. - ErrorKind: {:?}", ErrorKind::BUFFER_OUT_OF_BOUNDS);
+            return Err(ErrorKind::BUFFER_OUT_OF_BOUNDS);
         }
 
-        let pixels = unsafe { std::slice::from_raw_parts(pixels_ptr as *const u32, (width * height) as usize) };
-        unsafe { 
-            gbm_bo_unmap(self.buffer, map_data);
+        let mut map_data = std::ptr::null_mut();
+        let bo = self.buffer;
+        let mut stride = self.stride();
+
+        let src = unsafe { gbm_bo_map(bo, x, y, width, height, GBM_BO_TRANSFER_READ, &mut stride, &mut map_data) };
+        let count = (width * height * 4) as usize;
+        let mut dst = Vec::with_capacity(count);
+
+        if src == libc::MAP_FAILED {
+            error!("Failed to map buffer. - ErrorKind: {:?}", ErrorKind::BUFFER_MAPPING_FAILED);
+            return Err(ErrorKind::BUFFER_MAPPING_FAILED);
+        }
+
+        unsafe {
+            std::ptr::copy_nonoverlapping(src, dst.as_mut_ptr() as *mut c_void, count);
+            gbm_bo_unmap(bo, map_data);
         };
-        Ok(pixels.to_vec())
+        Ok(dst)
     }
 
     pub fn pixels(&self) -> Result<Vec<u32>, ErrorKind> {

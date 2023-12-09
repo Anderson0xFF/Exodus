@@ -57,7 +57,7 @@ impl Display {
         &self.gpus
     }
 
-    pub fn gpu(&mut self, id: i32) -> Option<&mut GPU> {
+    pub fn get_gpu(&mut self, id: i32) -> Option<&mut GPU> {
         let mut gpu = self.gpus.iter_mut().filter(|gpu| gpu.id() == id);
         gpu.next()
     }
@@ -72,7 +72,7 @@ impl Display {
 
             logger::Logger::init(level, logger_dir.as_str());
         } else {
-            logger::Logger::init(logger::Level::Debug, logger_dir.as_str());
+            logger::Logger::init(logger::Level::Info, logger_dir.as_str());
         }
     }
 

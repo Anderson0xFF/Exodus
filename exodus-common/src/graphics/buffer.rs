@@ -6,7 +6,7 @@ use libc::c_void;
 
 
 use crate::enums::{PixelFormat, BufferFlag};
-use crate::{error, debug};
+use crate::{error, debug, verbose};
 
 use super::device::native_device::Device;
 
@@ -33,25 +33,27 @@ pub enum Buffer {
 }
 
 impl Buffer {
-    pub fn new(device_manager: &Device, width: u32, height: u32, format: PixelFormat, buffer_flags: &[BufferFlag]) -> Result<Self, ErrorKind> {
-        
+    pub fn new(device: &Device, width: u32, height: u32, format: PixelFormat, buffer_flags: &[BufferFlag]) -> Result<Self, ErrorKind> {
+        debug!("Creating buffer. - Width: {}, Height: {}, Format: {:?}, Flags: {:?}", width, height, format, buffer_flags);
+
         let mut flags = 0;
 
         for flag in buffer_flags {
             match flag {
-                BufferFlag::Cursor => flags |= GBM_BO_USE_CURSOR,
-                BufferFlag::Linear => flags |= GBM_BO_USE_RENDERING,
-                BufferFlag::Protected => flags |= GBM_BO_USE_SCANOUT,
-                BufferFlag::Rendering => flags |= GBM_BO_USE_RENDERING,
-                BufferFlag::Scanout => flags |= GBM_BO_USE_SCANOUT,
+                BufferFlag::Cursor      => flags |= GBM_BO_USE_CURSOR,
+                BufferFlag::Linear      => flags |= GBM_BO_USE_RENDERING,
+                BufferFlag::Protected   => flags |= GBM_BO_USE_SCANOUT,
+                BufferFlag::Rendering   => flags |= GBM_BO_USE_RENDERING,
+                BufferFlag::Scanout     => flags |= GBM_BO_USE_SCANOUT,
             }
         }
 
         let buffer = unsafe {
-            gbm_bo_create(device_manager.as_ptr(), width, height, format as u32, flags)
+            gbm_bo_create(device.as_ptr(), width, height, format as u32, flags)
         };
 
         if buffer.is_null() {
+            error!("Failed to create buffer. - ErrorKind: {:?}", ErrorKind::BUFFER_CREATE_FAILED);
             return Err(ErrorKind::BUFFER_CREATE_FAILED);
         }
 
@@ -76,6 +78,7 @@ impl Buffer {
         todo!()
     }
 
+    /// Get the width of the buffer.
     pub fn width(&self) -> u32 {
         match self {
             Self::Legacy { width, .. } => *width,
@@ -83,6 +86,7 @@ impl Buffer {
         }
     }
 
+    /// Get the height of the buffer.
     pub fn height(&self) -> u32 {
         match self {
             Self::Legacy { height, .. } => *height,
@@ -90,6 +94,7 @@ impl Buffer {
         }
     }
 
+    /// Get the handle of the buffer.
     pub fn handle(&self) -> u32 {
         match self {
             Self::Legacy { handle, .. } => *handle,
@@ -97,6 +102,7 @@ impl Buffer {
         }
     }
 
+    /// Get the stride of the buffer.
     pub fn stride(&self) -> u32 {
         match self {
             Self::Legacy { stride, .. } => *stride,
@@ -104,6 +110,7 @@ impl Buffer {
         }
     }
 
+    /// Get the bits per pixel of the buffer.
     pub fn bpp(&self) -> u32 {
         match self {
             Self::Legacy { bpp, .. } => *bpp,
@@ -111,6 +118,7 @@ impl Buffer {
         }
     }
 
+    /// Get the pixel format of the buffer.
     pub fn format(&self) -> PixelFormat {
         match self {
             Self::Legacy { format, .. } => *format,
@@ -118,8 +126,9 @@ impl Buffer {
         }
     }
 
+    /// Write pixels to the buffer.
     pub fn write(&mut self, x: u32, y: u32, width: u32, height: u32, pixels: &[u32]) -> Result<(), ErrorKind> {
-        debug!("Writing buffer. - X: {}, Y: {}, Width: {}, Height: {}", x, y, width, height);
+        verbose!("Writing buffer. - X: {}, Y: {}, Width: {}, Height: {}", x, y, width, height);
 
         if pixels.len() != (width * height) as usize {
             error!("Invalid pixel length. - ErrorKind: {:?}", ErrorKind::BUFFER_INVALID_PIXELS);
@@ -158,8 +167,9 @@ impl Buffer {
         Ok(())
     }
 
+    /// Read pixels from the buffer.
     pub fn read(&self, x: u32, y: u32, width: u32, height: u32) -> Result<Vec<u32>, ErrorKind> {
-        debug!("Reading buffer. - X: {}, Y: {}, Width: {}, Height: {}", x, y, width, height);
+        verbose!("Reading buffer. - X: {}, Y: {}, Width: {}, Height: {}", x, y, width, height);
 
         if x + width > self.width() || y + height > self.height() {
             error!("Buffer is out of bounds. - ErrorKind: {:?}", ErrorKind::BUFFER_OUT_OF_BOUNDS);
