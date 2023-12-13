@@ -140,7 +140,7 @@ impl From<i32> for PixelFormat {
 
 #[derive(Debug, Clone)]
 pub enum SubPixel {
-    Unknown = 1,
+    Unknown         = 1,
     HorizontalRGB,
     HorizontalBGR,
     VerticalRGB,
@@ -171,12 +171,33 @@ pub enum Vendor {
     ARM         = 0x13B5,
     Qualcomm    = 0x5143,
     Broadcom    = 0x1166,
-    Vmware      = 0x15AD,
+    VMware      = 0x15AD,
     Google      = 0x1AE0,
     Apple       = 0x106B,
     Samsung     = 0x144D,
     Microsoft   = 0x1414,
     ZTE         = 0x1CF2,
+}
+
+impl ToString for Vendor {
+    fn to_string(&self) -> String {
+        match self {
+            Vendor::Unknown     => "Unknown".to_string(),
+            Vendor::AMD         => "Advanced Micro Devices".to_string(),
+            Vendor::Intel       => "Intel Corporation".to_string(),
+            Vendor::Nvidia      => "NVIDIA Corporation".to_string(),
+            Vendor::ARM         => "ARM".to_string(),
+            Vendor::Qualcomm    => "Qualcomm".to_string(),
+            Vendor::Broadcom    => "Broadcom Inc".to_string(),
+            Vendor::VMware      => "VMware".to_string(),
+            Vendor::Google      => "Google LLC".to_string(),
+            Vendor::Apple       => "Apple Inc".to_string(),
+            Vendor::Samsung     => "Samsung".to_string(),
+            Vendor::Microsoft   => "Microsoft Corporation".to_string(),
+            Vendor::ZTE         => "ZTE".to_string(),
+        }
+    }
+
 }
 
 impl From<u32> for Vendor {
@@ -188,7 +209,7 @@ impl From<u32> for Vendor {
             0x13B5 => Vendor::ARM,
             0x5143 => Vendor::Qualcomm,
             0x1166 => Vendor::Broadcom,
-            0x15AD => Vendor::Vmware,
+            0x15AD => Vendor::VMware,
             0x1AE0 => Vendor::Google,
             0x106B => Vendor::Apple,
             0x144D => Vendor::Samsung,
@@ -208,7 +229,7 @@ impl From<u16> for Vendor {
             0x13B5 => Vendor::ARM,
             0x5143 => Vendor::Qualcomm,
             0x1166 => Vendor::Broadcom,
-            0x15AD => Vendor::Vmware,
+            0x15AD => Vendor::VMware,
             0x1AE0 => Vendor::Google,
             0x106B => Vendor::Apple,
             0x144D => Vendor::Samsung,
@@ -235,37 +256,37 @@ pub enum BufferFlag {
     Scanout
 }
 
-
+#[derive(Debug, PartialEq, Eq)]
 pub enum Planes {
 
-    /// Primary plane
+    /// Background plane
     /// This is buffer is used to display the primary plane, background.
     Background = 1,
     
-    /// Cursor plane
-    /// This is buffer used to display the cursor.
-    /// This plane is always visible.
-    Cursor,
+    /// Foreground plane
+    /// This is buffer used to display the foreground.
+    /// This plane can be overlapped by another plane and is not always visible.
+    Foreground,
 
     /// Overlay plane
     /// This is buffer used to display the overlay plane.
     /// This plane is always visible, but does not overlap the cursor.
     Overlay,
 
-    /// Normal plane
-    /// This is buffer used to display the normal plane.
-    /// This plane can be overlapped by another plane and is not always visible.
-    Normal,
+    /// Cursor plane
+    /// This is buffer used to display the cursor.
+    /// This plane is always visible.
+    Cursor,
 }
 
 impl From<i32> for Planes {
-    fn from(value: i32) -> Self {
-        match value {
-            1 => Self::Background,
-            2 => Self::Cursor,
-            3 => Self::Overlay,
-            4 => Self::Normal,
-            _ => panic!("Invalid plane id"),
+    fn from(plane: i32) -> Self {
+        match plane {
+            1 => Planes::Background,
+            2 => Planes::Foreground,
+            3 => Planes::Overlay,
+            4 => Planes::Cursor,
+            _ => Planes::Foreground,
         }
     }
 }

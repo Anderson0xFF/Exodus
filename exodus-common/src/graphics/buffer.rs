@@ -8,7 +8,8 @@ use libc::c_void;
 use crate::enums::{PixelFormat, BufferFlag};
 use crate::{error, debug, verbose};
 
-use super::device::native_device::Device;
+use super::device::Device;
+
 
 #[derive(Debug)]
 pub enum Buffer {
@@ -41,8 +42,8 @@ impl Buffer {
         for flag in buffer_flags {
             match flag {
                 BufferFlag::Cursor      => flags |= GBM_BO_USE_CURSOR,
-                BufferFlag::Linear      => flags |= GBM_BO_USE_RENDERING,
-                BufferFlag::Protected   => flags |= GBM_BO_USE_SCANOUT,
+                BufferFlag::Linear      => flags |= GBM_BO_USE_LINEAR,
+                BufferFlag::Protected   => flags |= GBM_BO_USE_PROTECTED,
                 BufferFlag::Rendering   => flags |= GBM_BO_USE_RENDERING,
                 BufferFlag::Scanout     => flags |= GBM_BO_USE_SCANOUT,
             }

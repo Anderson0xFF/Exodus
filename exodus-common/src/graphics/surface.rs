@@ -3,13 +3,13 @@
 
 use exodus_errors::ErrorKind;
 use gbm::{
-    gbm_bo_flags::{GBM_BO_USE_RENDERING, GBM_BO_USE_SCANOUT, GBM_BO_USE_CURSOR},
+    gbm_bo_flags::{GBM_BO_USE_RENDERING, GBM_BO_USE_SCANOUT, GBM_BO_USE_CURSOR, GBM_BO_USE_PROTECTED, GBM_BO_USE_LINEAR},
     gbm_bo_format::{GBM_BO_FORMAT_ARGB8888, GBM_BO_FORMAT_XRGB8888}, gbm_bo_transfer_flags::{GBM_BO_TRANSFER_READ, GBM_BO_TRANSFER_WRITE}, gbm_bo_map, gbm_bo_unmap, gbm_surface_create, gbm_surface_lock_front_buffer,
 };
 use libc::c_void;
 
 use crate::{enums::{BufferFlag, PixelFormat}, verbose, error, debug};
-use super::device::native_device::DeviceRef;
+use super::device::{Device, DeviceRef};
 
 #[derive(Debug)]
 pub struct Surface {
@@ -29,8 +29,8 @@ impl Surface {
         for flag in surface_flags {
             match flag {
                 BufferFlag::Cursor      => flags |= GBM_BO_USE_CURSOR,
-                BufferFlag::Linear      => flags |= GBM_BO_USE_RENDERING,
-                BufferFlag::Protected   => flags |= GBM_BO_USE_SCANOUT,
+                BufferFlag::Linear      => flags |= GBM_BO_USE_LINEAR,
+                BufferFlag::Protected   => flags |= GBM_BO_USE_PROTECTED,
                 BufferFlag::Rendering   => flags |= GBM_BO_USE_RENDERING,
                 BufferFlag::Scanout     => flags |= GBM_BO_USE_SCANOUT,
             }

@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use crate::{debug, error};
 
-use super::GPUID;
+pub type GPUID = i32;
 
 pub type DeviceRef = Arc<Device>;
 pub type NativeBufferRaw = *mut gbm::gbm_bo;

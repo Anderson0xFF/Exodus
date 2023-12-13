@@ -11,32 +11,32 @@ macro_rules! ZeroMemory {
 
 #[derive(Debug)]
 pub struct Allocator {
-    stack: Option<HashMap<u32, *mut c_void>>,
+    stack: HashMap<u32, *mut c_void>,
 }
 
 impl Allocator {
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
         Self {
-            stack: None
+            stack: HashMap::new()
+        }
+    }
+
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            stack: HashMap::with_capacity(capacity)
         }
     }
 
     pub fn set(&mut self, key: u32, ptr: *mut c_void) {
-        if let Some(stack) = self.stack.as_mut() {
-            stack.insert(key, ptr);
-        }
+        self.stack.insert(key, ptr);
     }
 
     pub fn free(&mut self, key: u32) {
-        if let Some(stack) = self.stack.as_mut() {
-            stack.remove(&key);
-        }
+        self.stack.remove(&key);
+
     }
 
-    pub fn get(&mut self, key: u32) -> Option<*mut c_void> {
-        if let Some(stack) = self.stack.as_mut() {
-            return stack.get(&key).copied();
-        }
-        None
+    pub fn get(&mut self, key: u32) -> Option<&mut *mut c_void>{
+        self.stack.get_mut(&key)
     }
 }

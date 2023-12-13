@@ -29,6 +29,10 @@ impl Connection {
         Err(ErrorKind::CONNECTION_FAILED)
     }
 
+    pub fn disconnect(&mut self) {
+        self.socket.shutdown(std::net::Shutdown::Both).unwrap_or_default();
+    }
+
     pub fn set_nonblocking(&mut self, nonblocking: bool) {
         self.socket.set_nonblocking(nonblocking).unwrap_or_default();
     }
