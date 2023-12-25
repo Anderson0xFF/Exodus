@@ -1,5 +1,6 @@
 use exodus_common::enums::*;
 
+#[repr(C)]
 #[derive(Debug, Clone)]
 pub struct Display {
     pub id: i32,
@@ -12,19 +13,20 @@ impl Display {
     pub(crate) fn new(id: i32, gpu: i32, gpu_count: u32, gpus: Vec<i32>) -> Self { Self { id, gpu, gpu_count, gpus } }
 }
 
+#[repr(C)]
 #[derive(Debug, Clone)]
 pub struct GPU {
     pub id: i32,
     pub vendor: i32,
-    pub device: i32,
     pub screen_count: u32,
     pub screens: Vec<i32>,
 }
 
 impl GPU {
-    pub(crate) fn new(id: i32, vendor: i32, device: i32, screen_count: u32, screens: Vec<i32>) -> Self { Self { id, vendor, device, screen_count, screens } }
+    pub(crate) fn new(id: i32, vendor: i32, screen_count: u32, screens: Vec<i32>) -> Self { Self { id, vendor, screen_count, screens } }
 }
 
+#[repr(C)]
 #[derive(Debug, Clone)]
 pub struct Screen {
     pub id: i32,
