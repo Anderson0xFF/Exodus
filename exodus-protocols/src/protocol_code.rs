@@ -8,9 +8,9 @@ pub enum ProtocolCode {
     /// None protocol.
     ProtocolNone = 0x0,
 
-    /// Init vision entity.
+    /// Register entity in display server.
     /// 
-    /// Post: `ProtocolVisionEntityInit`
+    /// Post: `ProtocolEntityRegister`
     /// 
     /// ### Arguments
     /// 
@@ -18,7 +18,7 @@ pub enum ProtocolCode {
     /// 
     ///       Example: "Mozilla Firefox"
     /// 
-    /// * `title` - String utf8 of 128 bytes, the title of entity.
+    /// * `title` - String utf16 of 128 bytes, the title of entity.
     /// 
     ///       Example: "Mozilla Firefox - Web Browser"
     /// 
@@ -37,11 +37,11 @@ pub enum ProtocolCode {
     /// ### Returns
     /// 
     /// No returns.
-    ProtocolEntityInit,
+    ProtocolEntityRegister,
 
-    /// Get native vision data.
+    /// List all GPUs found in the system.
     /// 
-    /// Post: `ProtocolNativeVisionData`
+    /// Post: `ProtocolEnumerateGPUS`
     /// 
     /// ### Arguments
     /// 
@@ -49,153 +49,92 @@ pub enum ProtocolCode {
     /// 
     /// ### Returns
     /// 
-    /// * `id` - Integer of 32 bits, the id of native vision.
     /// 
-    ///       Example: 33.
+    /// * `gpu_count` - Number of 32 bits, the count of GPUs.
     /// 
-    /// * `gpu` - Integer of 32 bits, current gpu id of native vision.
+    ///       Example: 2
     /// 
-    ///       Example: 7.
+    /// * `gpus` - List of 32 bits, the id of GPUs.
     /// 
-    /// * `gpu_count` - Integer of 32 bits, the gpu count found.
+    ///       Example: [5, 9]
     /// 
-    ///       Example: 3.
-    /// 
-    /// * `gpus` - Array of integer of 32 bits, the gpus ids found.
-    /// 
-    ///       Example: [1, 7, 15].
-    ///
-    ProtocolDisplayData,
+    ProtocolEnumerateGPUS,
 
-    /// Get GPU data.
+    /// Get information about GPU.
     /// 
-    /// Post: `ProtocolGPUData`
+    /// Post: `ProtocolGPUGetInfo`
     /// 
     /// ### Arguments
     /// 
-    /// * `id` - Integer of 32 bits, the id of gpu.
+    /// * `gpu` - Number of 32 bits, the id of GPU.
+    /// 
+    ///       Example: 5.
     /// 
     /// ### Returns
     /// 
-    /// * `id` - Integer of 32 bits, the gpu id.
+    /// * `gpu` - Number of 32 bits, the id of GPU.
     /// 
-    /// * `vendor` - Integer of 32 bits, the gpu vendor.
+    /// * `vendor` - String utf8 of 128 bytes, the vendor of GPU.
     /// 
-    /// * `device` - Integer of 32 bits, the gpu device.
+    ///       Example: "NVIDIA Corporation"
     /// 
-    /// * `screen_count` - Integer of 32 bits, the screen count.
+    /// * `model` - Number of 32 bits, the device id of GPU.
     /// 
-    /// * `screens` - Array of integer of 32 bits, the screens ids.
-    ProtocolGPUData,
+    ///       Example: 0x1F02
+    /// 
+    /// * `screen_count` - Number of 32 bits, the count of screens.
+    /// 
+    ///       Example: 3
+    /// 
+    /// * `screens` - List of 32 bits, the id of screens.
+    /// 
+    ///       Example: [2, 4, 8]
+    /// 
+    ProtocolGPUGetInfo,
 
-    /// Get screen data.
+    /// Get information about screen.
     /// 
-    /// Post: `ProtocolScreenData`
+    /// Post: `ProtocolScreenGetInfo`
     /// 
     /// ### Arguments
     /// 
-    /// * `gpu` - Integer of 32 bits, the id of gpu.
+    /// * `screen` - Number of 32 bits, the id of screen.
     /// 
-    /// * `screen` - Integer of 32 bits, the id of screen.
-    /// 
-    /// ### Returns
-    /// 
-    /// * `id` - Usigned integer of 32 bits, the screen id.
-    /// 
-    /// * `connector_type` - Usigned integer of 32 bits, the connector type.
-    /// 
-    /// * `mm_width` - Integer of 32 bits, the width in millimeters.
-    /// 
-    /// * `mm_height` - Integer of 32 bits, the height in millimeters.
-    /// 
-    /// * `subpixel` - Integer of 32 bits, the subpixel.
-    /// 
-    /// * `mode` - Integer of 32 bits, the mode id.
-    /// 
-    /// * `modes_count` - Integer of 32 bits, the modes count.
-    /// 
-    /// * `modes` - Array of integer of 32 bits, the modes ids.
-    ProtocolScreenData,
-
-    /// Get screen mode data.
-    /// 
-    /// Post: `ProtocolScreenModeData`
-    /// 
-    /// ### Arguments
-    /// 
-    /// * `screen` - Integer of 32 bits, the id of screen.
-    /// 
-    /// ### Returns
-    ///    * `clock` - Integer of 32 bits, the clock.
-    ///    * `hdisplay` - Integer of 16 bits, the horizontal display.
-    ///    * `hsync_start` - Integer of 16 bits, the horizontal sync start.
-    ///    * `hsync_end` - Integer of 16 bits, the horizontal sync end.
-    ///    * `htotal` - Integer of 16 bits, the horizontal total.
-    ///    * `hskew` - Integer of 16 bits, the horizontal skew.
-    ///    * `vdisplay` - Integer of 16 bits, the vertical display.
-    ///    * `vsync_start` - Integer of 16 bits, the vertical sync start.
-    ///    * `vsync_end` - Integer of 16 bits, the vertical sync end.
-    ///    * `vtotal` - Integer of 16 bits, the vertical total.
-    ///    * `vscan` - Integer of 16 bits, the vertical scan.
-    ///    * `vrefresh` - Integer of 32 bits, the vertical refresh.
-    ///    * `flags` - Integer of 32 bits, the flags.
-    ///    * `type` - Integer of 32 bits, the type.
-    ///    * `name` - Array of 32 bytes, the name.
-    ProtocolScreenModeData,
-
-    /// Drawing pixels in screen.
-    /// 
-    /// Post: `ProtocolGPURendering`
-    /// 
-    /// ### Arguments
-    /// 
-    /// * `gpu` - Integer of 32 bits, the gpu id.
-    /// 
-    /// * `screen` - Integer of 32 bits, the id of screen.
-    /// 
-    /// * `plane` - Integer of 32 bits, the plane id.
-    ///     * Background = 1
-    ///     * Cursor = 2
-    ///     * Overlay = 3
-    ///     * Normal = 4
-    /// 
-    /// * `x` - Integer of 32 bits, the x position.
-    /// 
-    /// * `y` - Integer of 32 bits, the y position.
-    /// 
-    /// * `width` - Integer of 32 bits, the width.
-    /// 
-    /// * `height` - Integer of 32 bits, the height.
-    /// 
-    /// * `subpixel` - Integer of 32 bits, the subpixel.
-    ///     * Unknown = 1
-    ///     * HorizontalRGB = 2
-    ///     * HorizontalBGR = 3
-    ///     * VerticalRGB = 4
-    ///     * VerticalBGR = 5
-    ///     * None = 6
-    /// 
-    /// * `pixels` - Array of integer of 32 bits, the pixels.
+    ///       Example: 2
     /// 
     /// ### Returns
     /// 
-    /// No returns.
+    /// * `width` - Number of 32 bits, the width of screen in pixels.
     /// 
-    /// ### Example
-    ProtocolGPURendering,
-}
-
-impl From<i32> for ProtocolCode {
-    fn from(code: i32) -> Self {
-        match code {
-            -1 => ProtocolCode::ProtocolError,
-            0x0 => ProtocolCode::ProtocolNone,
-            0x1 => ProtocolCode::ProtocolDisplayData,
-            0x2 => ProtocolCode::ProtocolGPUData,
-            0x3 => ProtocolCode::ProtocolScreenData,
-            0x4 => ProtocolCode::ProtocolScreenModeData,
-            0x5 => ProtocolCode::ProtocolGPURendering,
-            _ => ProtocolCode::ProtocolNone,
-        }
-    }
+    ///       Example: 1920
+    /// 
+    /// * `height` - Number of 32 bits, the height of screen in pixels.
+    /// 
+    ///       Example: 1080
+    /// 
+    /// * `refresh` - Number of 32 bits, the refresh rate of screen in hertz.
+    /// 
+    ///       Example: 60
+    /// 
+    /// * `subpixel` - Number of 32 bits, the subpixel of screen.
+    /// 
+    ///       Example: 1
+    /// 
+    /// * `connector_type` - Number of 32 bits, the connector type of screen.
+    /// 
+    ///       Example: 2
+    /// 
+    /// * `mm_width` - Number of 32 bits, the width of screen in millimeters.
+    /// 
+    ///       Example: 309
+    /// 
+    /// * `mm_height` - Number of 32 bits, the height of screen in millimeters.
+    /// 
+    ///       Example: 174
+    /// 
+    /// * `buffer_count` - Number of 32 bits, the count of buffers.
+    /// 
+    ///       Example: 2
+    /// 
+    ProtocolScreenGetInfo,
 }
