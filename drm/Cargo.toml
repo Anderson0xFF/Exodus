@@ -11,4 +11,4 @@ path = "src/lib.rs"
 crate-type = ["lib"]
 
 [build-dependencies]
-bindgen = "0.68.1"
+bindgen = "0.69.1"
