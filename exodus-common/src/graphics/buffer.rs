@@ -143,8 +143,9 @@ impl Buffer {
 
         match self {
             Self::Legacy { .. } => todo!(),
-            Self::Native { .. } => self.write_buffer(x, y, width, height, pixels),
+            Self::Native { .. } => self.write_buffer(x, y, width, height, pixels)?,
         }
+        Ok(())
     }
 
     fn write_buffer(&self, x: u32, y: u32, width: u32, height: u32, pixels: &[u32]) -> Result<(), ErrorKind> {
@@ -152,19 +153,25 @@ impl Buffer {
         let bo = self.buffer() as *mut gbm_bo;
         let mut stride = self.stride();
 
-        let src = pixels.as_ptr() as *const c_void;
         let dst = unsafe { gbm_bo_map(bo, x, y, width, height, GBM_BO_TRANSFER_WRITE, &mut stride, &mut map_data) };
-        let count = (width * height * 4) as usize;
-
         if dst == libc::MAP_FAILED {
             error!("Failed to map buffer. - ErrorKind: {:?}", ErrorKind::BUFFER_MAPPING_FAILED);
             return Err(ErrorKind::BUFFER_MAPPING_FAILED);
         }
-
-        unsafe { 
-            std::ptr::copy_nonoverlapping(src, dst, count);
+        let dst = dst as *mut u32;
+        
+        unsafe {
+            for w in 0..width {
+                for h in 0..height {
+                    let index = (w + h * width) as usize;
+                    let pixel = pixels[index];
+                    dst.offset((h * (stride / 4) + w).try_into().unwrap()).write(pixel);
+                }
+            }
             gbm_bo_unmap(bo, map_data);
-        };
+        }
+
+
         Ok(())
     }
 
@@ -198,10 +205,29 @@ impl Buffer {
         }
 
         unsafe {
-            std::ptr::copy_nonoverlapping(src, dst.as_mut_ptr() as *mut c_void, count);
+            let src = src as *mut u32;
+            for w in 0..width {
+                for h in 0..height {
+                    let index = (w + h * width) as usize;
+                    let pixel = src.offset((h * (stride / 4) + w).try_into().unwrap()).read();
+                    dst.insert(index, pixel);
+                }
+            }
+            
             gbm_bo_unmap(bo, map_data);
         };
         Ok(dst)
+    }
+
+    pub fn clear(&mut self) -> Result<(), ErrorKind> {
+        let width = self.width();
+        let height = self.height();
+        let color = 0x00000000;
+        verbose!("Clearing buffer. - Color: {}", color);
+
+        let pixels = vec![color; (width * height) as usize];
+
+        self.write(0, 0, width, height, &pixels)
     }
 
     fn buffer(&self) -> *mut c_void {
