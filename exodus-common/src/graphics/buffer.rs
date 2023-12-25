@@ -170,8 +170,6 @@ impl Buffer {
             }
             gbm_bo_unmap(bo, map_data);
         }
-
-
         Ok(())
     }
 
