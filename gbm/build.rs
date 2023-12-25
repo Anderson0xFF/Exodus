@@ -6,7 +6,7 @@ fn main() {
 
     let bindings = bindgen::Builder::default()
         .header("/usr/include/gbm.h")
-        .parse_callbacks(Box::new(bindgen::CargoCallbacks))
+        .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
         .constified_enum_module(".*")
         .generate()
         .expect("Unable to generate bindings");

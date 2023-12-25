@@ -8,7 +8,8 @@ fn main() {
         .clang_arg("-I/usr/include/libdrm")
         .header("/usr/include/xf86drm.h")
         .header("/usr/include/xf86drmMode.h")
-        .parse_callbacks(Box::new(bindgen::CargoCallbacks))
+        .header("/usr/include/drm/drm_mode.h")
+        .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
         .constified_enum_module(".*")
         .generate()
         .expect("Unable to generate bindings");
