@@ -7,162 +7,116 @@ pub type Handler = fn(&mut Display, &mut Entity, NetworkMessage) -> Result<(), E
 
 #[derive(Debug)]
 pub struct ProtocolHandler {
-    dpy:                    Display,
-    recv_entity_metadata:   Handler,
-    send_display_data:      Handler,
-    send_gpu_data:          Handler,
-    send_screen_data:       Handler,
+    proto_register_entity:        Handler,
+    proto_enumerate_gpus:         Handler,
+    proto_gpu_get_info:           Handler,
 }
 
 impl ProtocolHandler {
-    pub fn new(dpy: Display) -> Self {
+    pub fn new() -> Self {
         Self {
-            dpy,
-            recv_entity_metadata:   Self::recv_entity_metadata,
-            send_display_data:      Self::send_display_data,
-            send_gpu_data:          Self::send_gpu_data,
-            send_screen_data:       Self::send_screen_data,
+            proto_register_entity:        Self::protocol_register_entity,
+            proto_enumerate_gpus:         Self::protocol_enumerate_gpus,
+            proto_gpu_get_info:           Self::protocol_gpu_get_info,
         }
     }
 
     /// Sets the protocol handler for the given protocol code.
     pub fn set_protocol_handler(&mut self, code: ProtocolCode, callback: Handler) -> Result<(), ErrorKind> {
         match code {
-            ProtocolCode::ProtocolEntityInit        => self.recv_entity_metadata    = callback,
-            ProtocolCode::ProtocolDisplayData       => self.send_display_data       = callback,
-            ProtocolCode::ProtocolGPUData           => self.send_gpu_data           = callback,
-            ProtocolCode::ProtocolScreenData        => self.send_screen_data        = callback,
-            ProtocolCode::ProtocolScreenModeData    => todo!(),
-            ProtocolCode::ProtocolGPURendering      => todo!(),
+            ProtocolCode::ProtocolEntityRegister        => self.proto_register_entity   = callback,
+            ProtocolCode::ProtocolEnumerateGPUS         => self.proto_enumerate_gpus    = callback,
             _ => todo!(),
         };
 
         Ok(())
     }
 
-    /// Processes the request from the given entity.
-    pub fn process_request(&mut self, entity: &mut Entity) -> Result<(), ErrorKind> {
-        let msg = entity.get_request()?;
+    /// Handles the given protocol code.
+    /// 
+    /// # Arguments
+    /// 
+    /// * `code` - The protocol code to handle.
+    /// * `message` - The message to handle.
+    /// 
+    /// # Returns
+    /// 
+    /// Returns `Ok(())` if the protocol code was handled successfully.
+    /// Returns `Err(ErrorKind)` if the protocol code was not handled successfully.
+    /// 
+    /// # Examples
+    
+    pub fn handle(&mut self, display: &mut Display, entity: &mut Entity, code: ProtocolCode) -> Result<(), ErrorKind> {
+        let message = entity.recv_message()?;
 
-        if msg.is_none() {
+        if message.is_none() {
             return Ok(());
         }
 
-        let msg = msg.unwrap();
-        let code = msg.code()?;
-        let code = ProtocolCode::from(code);
+        let message = message.unwrap();
 
         match code {
-            ProtocolCode::ProtocolEntityInit
-            => {
-                let recv_entity_metadata: Handler = self.recv_entity_metadata;
-                recv_entity_metadata(&mut self.dpy, entity, msg)?;
-            }
-            ProtocolCode::ProtocolDisplayData
-            => {
-                let send_display_data: Handler = self.send_display_data;
-                send_display_data(&mut self.dpy, entity, msg)?;
-            }
-            ProtocolCode::ProtocolGPUData
-            => {
-                let send_gpu_data: Handler = self.send_gpu_data;
-                send_gpu_data(&mut self.dpy, entity, msg)?;
-            }
-            ProtocolCode::ProtocolScreenData
-            => {
-                let send_screen_data: Handler = self.send_screen_data;
-                send_screen_data(&mut self.dpy, entity, msg)?;
-            }
-            ProtocolCode::ProtocolScreenModeData    => todo!(),
-            ProtocolCode::ProtocolGPURendering      => todo!(),
+            ProtocolCode::ProtocolEntityRegister    => (self.proto_register_entity)(display, entity, message),
+            ProtocolCode::ProtocolEnumerateGPUS     => (self.proto_enumerate_gpus)(display, entity, message),
+            ProtocolCode::ProtocolGPUGetInfo        => (self.proto_gpu_get_info)(display, entity, message),
             _ => todo!(),
-        };
-
-        Ok(())
+        }
     }
 
-    pub fn recv_entity_metadata(_: &mut Display, entity: &mut Entity, mut msg: NetworkMessage) -> Result<(), ErrorKind> {
-        let class       = msg.read_string_utf8()?;
-        let version        = msg.read_u32()?;
-        let author      = msg.read_string_utf8()?;
-        let description = msg.read_string_utf8()?;
+    pub fn protocol_register_entity(_: &mut Display, entity: &mut Entity, mut message: NetworkMessage) -> Result<(), ErrorKind> {
+        let class = message.read_string_utf8()?;
+        let title = message.read_string_utf16()?;
+        let version = message.read_u32()?;
+        let author = message.read_string_utf8()?;
+        let description = message.read_string_utf8()?;
 
         entity.set_class(class);
+        entity.set_title(title);
         entity.set_version(version);
         entity.set_author(author);
         entity.set_description(description);
+
         Ok(())
     }
 
-    pub fn send_display_data(dpy: &mut Display, entity: &mut Entity, _: NetworkMessage) -> Result<(), ErrorKind> {
-        let mut msg = NetworkMessage::new(ProtocolCode::ProtocolDisplayData);
-        msg.write_i32(dpy.id());
+    pub fn protocol_enumerate_gpus(display: &mut Display, entity: &mut Entity, _: NetworkMessage) -> Result<(), ErrorKind> {
+        let mut message = NetworkMessage::new(ProtocolCode::ProtocolEnumerateGPUS);
+        let gpus = display.gpus();
+
+        message.write_u32(gpus.len() as u32);
+
+        for gpu in gpus {
+            message.write_i32(gpu.id());
+        }
+
+        entity.send(message);
+
+        Ok(())
+    }
+
+    pub fn protocol_gpu_get_info(display: &mut Display, entity: &mut Entity, mut message: NetworkMessage) -> Result<(), ErrorKind> {
+        let gpu_id = message.read_i32()?;
         
-        let gpus = dpy.gpus();
-        if gpus.is_empty() {
-            msg.write_i32(-1);
-            msg.write_u32(0);
+        if let Some(gpu) = display.get_gpu(gpu_id) {
+            let mut message = NetworkMessage::new(ProtocolCode::ProtocolGPUGetInfo);
+            message.write_i32(gpu.id());
+            message.write_string_utf8(gpu.vendor().to_string().as_str());
+            message.write_u32(gpu.model());
+            message.write_u32(gpu.screens().len() as u32);
+
+            for screen in gpu.screens() {
+                message.write_u32(screen.id());
+            }
+
+            entity.send(message);
+
             return Ok(());
         }
 
-        let gpu = &gpus[0];
-        msg.write_i32(gpu.id());
-        msg.write_u32(gpus.len().try_into().unwrap());
+        let mut message = NetworkMessage::new(ProtocolCode::ProtocolError);
+        message.write_string_utf8("Failed to get GPU info.");
+        entity.send(message);
 
-        for gpu in gpus {
-            msg.write_i32(gpu.id());
-        }
-
-        entity.send(msg);
-        Ok(())
-    }
-
-    pub fn send_gpu_data(dpy: &mut Display, entity: &mut Entity, mut msg: NetworkMessage) -> Result<(), ErrorKind> {
-        let id = msg.read_i32()?;
-        
-        if let Some(gpu) = dpy.get_gpu(id) {
-            let mut msg = NetworkMessage::new(ProtocolCode::ProtocolGPUData);
-            msg.write_i32(gpu.id());
-            msg.write_i32(-1);
-            msg.write_i32(-1);
-            msg.write_u32(gpu.screens().len().try_into().unwrap());
-
-            for screen in gpu.screens() {
-                msg.write_u32(screen.id());
-            }
-
-            entity.send(msg);
-        }
-
-        Ok(())
-    }
-
-    pub fn send_screen_data(dpy: &mut Display, entity: &mut Entity, mut input: NetworkMessage) -> Result<(), ErrorKind> {
-        let gpu = input.read_i32()?;
-        let gpu = dpy.get_gpu(gpu).unwrap();
-        let screen = input.read_u32()?;
-        let screen = gpu.get_screen(screen).unwrap();
-
-        let mut msg = NetworkMessage::new(ProtocolCode::ProtocolScreenData);
-        msg.write_u32(screen.id());
-        msg.write_u32(screen.connector_type() as u32);
-        msg.write_u32(screen.mmWidth());
-        msg.write_u32(screen.mmHeight());
-        msg.write_u32(screen.subpixel());
-
-        // Mode
-        msg.write_u32(screen.mode());
-
-        // Modes count
-        // let modes = screen.modes();
-        // msg.write_u32(modes.len().try_into().unwrap());
-
-        // // Modes
-        // for i in 0..modes.len() {
-        //     msg.write_u32(i.try_into().unwrap());
-        // }
-
-        entity.send(msg);
         Ok(())
     }
 }
