@@ -27,9 +27,9 @@ impl Display {
                 Err(_) => logger::Level::Error,
             };
 
-            logger::Logger::initialize(level, Some(&loggerfile));
+            logger::Logger::initialize(id, level, Some(&loggerfile));
         } else {
-            logger::Logger::initialize(logger::Level::Info, Some(&loggerfile));
+            logger::Logger::initialize(id, logger::Level::Info, Some(&loggerfile));
         }
 
 

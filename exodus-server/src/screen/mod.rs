@@ -12,42 +12,6 @@ use crate::framebuffer::Framebuffer;
 use self::{connector::Connector, crtcs::CRTC};
 
 #[derive(Debug)]
-pub struct DrawCommand {
-    pub x:          u32,
-    pub y:          u32,
-    pub plane:      u32,
-    pub width:      u32,
-    pub height:     u32,
-    pub pixels:     Vec<u32>,
-}
-
-impl DrawCommand {
-    pub fn set_x(&mut self, x: u32) {
-        self.x = x;
-    }
-
-    pub fn y(&self) -> u32 {
-        self.y
-    }
-
-    pub fn set_plane(&mut self, plane: u32) {
-        self.plane = plane;
-    }
-
-    pub fn set_width(&mut self, width: u32) {
-        self.width = width;
-    }
-
-    pub fn set_height(&mut self, height: u32) {
-        self.height = height;
-    }
-
-    pub fn set_pixels(&mut self, pixels: Vec<u32>) {
-        self.pixels = pixels;
-    }
-}
-
-#[derive(Debug)]
 pub struct Screen {
     device:         DeviceRef,
     mode:           u32,
@@ -56,8 +20,6 @@ pub struct Screen {
     framebuffers:   Vec<Framebuffer>,
     connector:      Connector,
     crtc:           CRTC,
-    queue:          Vec<DrawCommand>,
-    vsync:          bool,
 }
 
 impl Screen {
@@ -152,8 +114,6 @@ impl Screen {
             connector,
             mode: mode_id as u32,
             crtc,
-            queue: Vec::with_capacity(128),
-            vsync: true,
         })
     }
 
@@ -194,17 +154,13 @@ impl Screen {
         mode.vrefresh
     }
 
-    pub fn clear(&mut self) {
-        let length = self.buffers.len();
-        self.buffers[(self.index + 1) % length].clear().unwrap();
+    pub fn clear_color(&mut self, color: u32) {
+        let pixels = vec![color; (self.width() * self.height()) as usize];
+        self.rect(0, 0, self.width(), self.height(), &pixels).unwrap();
     }
+    
 
-    /// Submit a draw command to the draw queue.
-    pub fn submit(&mut self, command: DrawCommand) {
-        self.queue.push(command);
-    }
-
-    pub fn write(&mut self, x: u32, y: u32, width: u32, height: u32, pixels: &[u32]) -> Result<(), ErrorKind> {
+    pub fn rect(&mut self, x: u32, y: u32, width: u32, height: u32, pixels: &[u32]) -> Result<(), ErrorKind> {
         let length = self.buffers.len();
         let index = (self.index + 1) % length;
         self.buffers[index].write(x, y, width, height, pixels)
@@ -212,21 +168,17 @@ impl Screen {
 
     /// Swap the buffers of the screen.
     pub fn swap_buffers(&mut self) -> Result<(), ErrorKind> {
-        let index = (self.index + 1) %  self.buffers.len();
-
-        self.queue.sort_by(|x, y| x.plane.cmp(&y.plane));
-
-        for command in self.queue.drain(..) {
-            self.buffers[index].write(command.x, command.y, command.width, command.height, &command.pixels)?;
-        }
-
         let framebuffer = &self.framebuffers[self.index];
         let mode = self.connector.get_mode(self.mode).unwrap();
 
-        self.crtc.set(&mut [self.id()], mode, framebuffer)?;
+        self.crtc.set_framebuffer(&[&self.connector], mode, framebuffer);
 
         self.index = (self.index + 1) % self.buffers.len();
         Ok(())
+    }
+
+    pub fn buffer_count(&self) -> usize {
+        self.buffers.len()
     }
 
     pub(super) fn dispose(&mut self) {
@@ -236,10 +188,6 @@ impl Screen {
 
     pub fn mode(&self) -> u32 {
         self.mode
-    }
-
-    pub fn set_vsync(&mut self, vsync: bool) {
-        self.vsync = vsync;
     }
 }
 

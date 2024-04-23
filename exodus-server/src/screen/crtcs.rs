@@ -16,7 +16,6 @@ pub struct CRTC {
     mode: drmModeModeInfo,
     gamma_size: i32,
     gpu: GPUID,
-    framebuffer: Vec<Framebuffer>,
 }
 
 impl CRTC {
@@ -49,7 +48,6 @@ impl CRTC {
             mode: crtc.mode,
             gamma_size: crtc.gamma_size,
             gpu,
-            framebuffer: Vec::with_capacity(3),
         };
 
         unsafe { drmModeFreeCrtc(crtc_ptr) };
@@ -88,52 +86,15 @@ impl CRTC {
         self.gamma_size
     }
 
-    pub fn set(
-        &mut self,
-        connectors: &mut [u32],
-        mode: drmModeModeInfoPtr,
-        framebuffer: &Framebuffer,
-    ) -> Result<(), ErrorKind> {
-        
+    pub fn set_framebuffer(&mut self, connectors: &[&Connector], mode: drmModeModeInfoPtr, framebuffer: &Framebuffer) {
+
+        let connectors = connectors.iter().map(|c| c.id()).collect::<Vec<_>>();
+
         unsafe {
-            drmModeSetCrtc(
-                self.gpu,
-                self.id,
-                framebuffer.id(),
-                0,
-                0,
-                connectors.as_mut_ptr(),
-                connectors.len().try_into().unwrap(),
-                mode,
-            );
-
-        }
-        Ok(())
-    }
-
-    pub fn set_framebuffer(&mut self, framebuffer: Framebuffer, connector: &Connector, mode: drmModeModeInfoPtr) {
-        unsafe {
-            drmModeSetCrtc(
-                self.gpu,
-                self.id,
-                framebuffer.id(),
-                0,
-                0,
-                &mut connector.id(),
-                1,
-                mode,
-            );
-
-
-            if self.framebuffer.len() > 3 {
-                self.framebuffer.remove(0);
-            }
-
-            self.framebuffer.push(framebuffer);
-
+            drmModeSetCrtc(self.gpu, self.id, framebuffer.id(), 0,0,
+                connectors.as_ptr() as *mut u32, connectors.len() as i32, mode);
         }
     }
-
 
     pub fn restore(&mut self, connectors: &mut [u32]) {
         unsafe {

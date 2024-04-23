@@ -1,60 +1,66 @@
+#![allow(dead_code)]
+
 extern crate drm;
 extern crate gbm;
 
-pub mod client;
 pub mod display;
+pub mod client;
+pub mod device;
+pub mod screen;
 pub mod protocol_handler;
+
+mod framebuffer;
 
 
 #[cfg(test)]
 mod tests {
+    use libc::rand;
+
+    use crate::display::Display;
+
 
     #[test]
     fn rendering_direct_screen() {
-        let mut display = super::display::Display::new().unwrap();
-        let gpus = &display.gpus()[0];
-        let gpu = display.gpu(gpus.id()).unwrap();
-        let screens = gpu.screens();
-        let screen = gpu.get_screen(screens[0].id()).unwrap();
+        let mut display = Display::new(512).unwrap();
 
-        let length = (screen.width() * screen.height()) as usize;
+        let gpu = display.gpus_mut().first_mut().unwrap();
+        let screen = gpu.screens_mut().first_mut().unwrap();
 
-        let mut background_color_1 = Vec::with_capacity(length);
-        background_color_1.resize(length, 0xDE595D);
+        let mut color = 0x00000000;
+        let width = 512;
+        let height = 512;
+        let lenght: usize = width * height;
 
-        let mut background_color_2 = Vec::with_capacity(length);
-        background_color_2.resize(length, 0xDEA259);
+        for _ in 1..60
+        {
+            //let start = std::time::Instant::now();
+            screen.clear_color(00000000);
 
-        let mut background_color_3 = Vec::with_capacity(length);
-        background_color_3.resize(length, 0x4CE0A5);
+            let mut pixels = Vec::with_capacity(lenght);
 
-        println!("{}x{}", screen.width(), screen.height());
-
-        for i in 0..500 {
-
-            let instant = std::time::Instant::now();
-            
-            if i % 3 == 0 {
-                screen.write(0, 0, screen.width(), screen.height(), &background_color_1).unwrap();
-            }
-            else if i % 3 == 1 {
-                screen.write(0, 0, screen.width(), screen.height(), &background_color_2).unwrap();
-            }
-            else {
-                screen.write(0, 0, screen.width(), screen.height(), &background_color_3).unwrap();
-            }
-
+            pixels.resize(lenght, color);
+            screen.rect(10, 0, width as u32, height as u32, &pixels).unwrap();
             screen.swap_buffers().unwrap();
 
-            let elapsed = instant.elapsed();
+            // rand color r
+            color = unsafe { rand() as u32 } % 255 ;
+            // rand color g
+            color = color + (unsafe { rand() as u32 } % 255) * 0x00000100;
+            // rand color b
+            color = color + (unsafe { rand() as u32 } % 255) * 0x00010000;
 
-            //FPS
-            let fps = 1.0 / (elapsed.as_secs() as f64 + (elapsed.subsec_nanos() as f64 / 1_000_000_000.0));
-            println!("FPS: {:.2}", fps);
-            std::thread::sleep(std::time::Duration::from_millis(16));
+
+            //let end = std::time::Instant::now();
+
+            //let duration = end.duration_since(start);
+            //let fps = 1.0 / (duration.as_secs_f64() / 1.0);
+            //println!("FPS: {}", fps);
+            //std::thread::sleep(std::time::Duration::from_millis(120));
         }
 
-        gpu.dispose();
+        //entities.clear();
+        display.dispose();
+
     }
 }
 

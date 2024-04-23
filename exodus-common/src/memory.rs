@@ -27,13 +27,17 @@ impl Allocator {
         }
     }
 
-    pub fn set(&mut self, key: u32, ptr: *mut c_void) {
+    pub fn alloc<T>(&mut self, key: u32, value: T) {
+        let ptr = Box::into_raw(Box::new(value));
+        self.stack.insert(key, ptr as *mut c_void);
+    }
+
+    pub unsafe fn set(&mut self, key: u32, ptr: *mut c_void) {
         self.stack.insert(key, ptr);
     }
 
     pub fn free(&mut self, key: u32) {
         self.stack.remove(&key);
-
     }
 
     pub fn get(&mut self, key: u32) -> Option<&mut *mut c_void>{

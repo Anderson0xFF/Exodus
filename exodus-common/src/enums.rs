@@ -258,7 +258,8 @@ pub enum BufferFlag {
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Planes {
-
+    None = 0,
+    
     /// Background plane
     /// This is buffer is used to display the primary plane, background.
     Background = 1,
@@ -286,7 +287,7 @@ impl From<i32> for Planes {
             2 => Planes::Foreground,
             3 => Planes::Overlay,
             4 => Planes::Cursor,
-            _ => Planes::Foreground,
+            _ => Planes::None,
         }
     }
 }

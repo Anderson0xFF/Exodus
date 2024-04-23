@@ -1,10 +1,11 @@
-use exodus_common::net::{connection::Connection, network_message::NetworkMessage};
+use exodus_common::{net::{connection::Connection, network_message::NetworkMessage}, debug};
 use exodus_errors::ErrorKind;
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Entity {
-    conn: Option<Connection>,
+    conn: Connection,
     class: String,
+    title: String,
     version: u32,
     author: String,
     description: String,
@@ -14,15 +15,24 @@ impl Entity {
     #[inline]
     pub(crate) fn new(conn: Connection) -> Self {
         Self {
-            conn: Some(conn), ..Default::default()
+            conn,
+            class: String::new(),
+            title: String::new(),
+            version: 0,
+            author: String::new(),
+            description: String::new()
         }
     }
     pub fn id(&self) -> u32 {
-        self.conn.as_ref().unwrap().id()
+        self.conn.id()
     }
 
     pub(crate) fn set_class(&mut self, class: String) {
         self.class = class;
+    }
+
+    pub(crate) fn set_title(&mut self, title: String) {
+        self.title = title;
     }
 
     pub(crate) fn set_version(&mut self, version: u32) {
@@ -53,11 +63,18 @@ impl Entity {
         &self.description
     }
 
-    pub fn get_request(&mut self) -> Result<Option<NetworkMessage>, ErrorKind> {
-        self.conn.as_mut().unwrap().buffer()
+    pub(crate) fn recv_message(&mut self) -> Result<Option<NetworkMessage>, ErrorKind> {
+        self.conn.buffer()
     }
 
     pub fn send(&mut self, msg: NetworkMessage) {
-        self.conn.as_mut().unwrap().send(msg)
+        self.conn.send(msg)
+    }
+}
+
+impl Drop for Entity {
+    fn drop(&mut self) {
+        debug!("Entity dropped. - ID: {}", self.id());
+        self.conn.disconnect();
     }
 }

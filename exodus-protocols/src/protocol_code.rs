@@ -62,7 +62,7 @@ pub enum ProtocolCode {
 
     /// Get information about GPU.
     /// 
-    /// Post: `ProtocolGPUGetInfo`
+    /// Post: `ProtocolGPUInfo`
     /// 
     /// ### Arguments
     /// 
@@ -74,35 +74,61 @@ pub enum ProtocolCode {
     /// 
     /// * `gpu` - Number of 32 bits, the id of GPU.
     /// 
-    /// * `vendor` - String utf8 of 128 bytes, the vendor of GPU.
+    /// * `vendor` - Number of 32 bits, the vendor id of GPU.
+    /// 
+    ///       Example: 0x10DE
+    /// 
+    /// * `vendor_name` - String utf8 of 128 bytes, the vendor of GPU.
     /// 
     ///       Example: "NVIDIA Corporation"
     /// 
-    /// * `model` - Number of 32 bits, the device id of GPU.
+    /// * `model` - Number of 32 bits, the model id of GPU.
     /// 
     ///       Example: 0x1F02
     /// 
+    ProtocolGPUInfo,
+
+    /// List all screens found in the system.
+    /// 
+    /// Post: `ProtocolEnumerateScreens`
+    /// 
+    /// ### Arguments
+    /// 
+    /// * `gpu` - Number of 32 bits, the id of GPU.
+    /// 
+    ///       Example: 5.
+    /// 
+    /// ### Returns
+    /// 
     /// * `screen_count` - Number of 32 bits, the count of screens.
     /// 
-    ///       Example: 3
+    ///       Example: 2
     /// 
     /// * `screens` - List of 32 bits, the id of screens.
     /// 
-    ///       Example: [2, 4, 8]
+    ///       Example: [1, 2]
     /// 
-    ProtocolGPUGetInfo,
+    ProtocolEnumerateScreens,
 
     /// Get information about screen.
     /// 
-    /// Post: `ProtocolScreenGetInfo`
+    /// Post: `ProtocolScreenInfo`
     /// 
     /// ### Arguments
+    /// 
+    /// * `gpu` - Number of 32 bits, the id of GPU.
+    /// 
+    ///       Example: 5.
     /// 
     /// * `screen` - Number of 32 bits, the id of screen.
     /// 
     ///       Example: 2
     /// 
     /// ### Returns
+    /// 
+    /// * `screen` - Number of 32 bits, the id of screen.
+    /// 
+    ///       Example: 2
     /// 
     /// * `width` - Number of 32 bits, the width of screen in pixels.
     /// 
@@ -136,5 +162,5 @@ pub enum ProtocolCode {
     /// 
     ///       Example: 2
     /// 
-    ProtocolScreenGetInfo,
+    ProtocolScreenInfo,
 }

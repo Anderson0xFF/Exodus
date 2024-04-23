@@ -38,16 +38,17 @@ impl From<i32> for Level {
 }
 
 pub struct Logger {
+    id: i32,
     level: Level,
     file: Option<std::fs::File>,
 }
 
 impl Logger {
-    fn new(level: Level, file: Option<std::fs::File>) -> Self { Self { level, file } }
+    fn new(id: i32, level: Level, file: Option<std::fs::File>) -> Self { Self { id, level, file } }
 
-    pub fn initialize(level: Level, filename: Option<&str>) {
+    pub fn initialize(id: i32, level: Level, filename: Option<&str>) {
         if filename.is_none() {
-            unsafe { LOGGER = Some(Logger::new(level, None)); }
+            unsafe { LOGGER = Some(Logger::new(id, level, None)); }
             return;
         }
 
@@ -58,7 +59,7 @@ impl Logger {
         let path = format!("{}/{}/", EXODUS_LOG_DIRECTORY, filename.unwrap());
         
         if let Ok(file) =  std::fs::File::options().append(true).create(true).open(path) {
-            unsafe { LOGGER = Some(Logger::new(level, Some(file))  ); }
+            unsafe { LOGGER = Some(Logger::new(id, level, Some(file))  ); }
             return;
         }
     }
@@ -69,7 +70,7 @@ impl Logger {
                 return logger;
             }
 
-            Logger::initialize(Level::Info, None);
+            Logger::initialize(0, Level::Info, None);
             Self::instance()
         }
     }
@@ -80,9 +81,9 @@ impl Logger {
             let date = chrono::offset::Local::now().format("%Y-%m-%d %H:%M:%S");
             let filename = if filename.is_some() { format!("[{}:{}]", filename.unwrap(), line) } else { String::new() };
 
-            let mut message_formated = format!("{} [EXODUS] [{}] - {}\n", date, level, message);
+            let mut message_formated = format!("{} [EXODUS-{}] [{}] - {}\n", date, self.id, level, message);
             if level == Level::Debug {
-                message_formated = format!("{} [EXODUS] [{}] {} - {}\n", date, level, filename, message);
+                message_formated = format!("{} [EXODUS-{}] [{}] {} - {}\n", date, self.id, level, filename, message);
             }
 
             if let Some(ref mut file) = self.file {
@@ -91,11 +92,11 @@ impl Logger {
             }
 
             let message_formated = match level {
-                Level::Verbose  => format!("{} [EXODUS] [\x1b[37m{}\x1b[0m] - {}", date, level, message),
-                Level::Debug    => format!("{} [EXODUS] [\x1b[34m{}\x1b[0m] {} - {}", date, level, filename, message),
-                Level::Info     => format!("{} [EXODUS] [\x1b[32m{}\x1b[0m] - {}", date, level, message),
-                Level::Warn     => format!("{} [EXODUS] [\x1b[33m{}\x1b[0m] - {}", date, level, message),
-                Level::Error    => format!("{} [EXODUS] [\x1b[31m{}\x1b[0m] - {}", date, level, message),
+                Level::Verbose  => format!("{} [EXODUS-{}] [\x1b[37m{}\x1b[0m] - {}",date, self.id,  level, message),
+                Level::Debug    => format!("{} [EXODUS-{}] [\x1b[34m{}\x1b[0m] {} - {}",date, self.id,  level, filename, message),
+                Level::Info     => format!("{} [EXODUS-{}] [\x1b[32m{}\x1b[0m] - {}",date, self.id,  level, message),
+                Level::Warn     => format!("{} [EXODUS-{}] [\x1b[33m{}\x1b[0m] - {}",date, self.id,  level, message),
+                Level::Error    => format!("{} [EXODUS-{}] [\x1b[31m{}\x1b[0m] - {}",date, self.id,  level, message),
             };
 
             let mut lock = std::io::stdout().lock();
